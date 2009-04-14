@@ -1127,7 +1127,7 @@ static int img_convert(int argc, char **argv)
     const uint8_t *buf1;
     BlockDriverInfo bdi;
     QEMUOptionParameter *param = NULL, *create_options = NULL;
-    QEMUOptionParameter *out_baseimg_param;
+    QEMUOptionParameter *out_baseimg_param, *scsi;
     char *options = NULL;
     const char *snapshot_name = NULL;
     float local_progress = 0;
@@ -1327,6 +1327,12 @@ static int img_convert(int argc, char **argv)
             ret = -1;
             goto out;
         }
+    }
+
+    if ((scsi = get_option_parameter(param, BLOCK_OPT_SCSI)) && scsi->value.n && strcmp(drv->format_name, "vmdk")) {
+        error_report("SCSI devices not supported for this file format");
+        ret = -1;
+        goto out;
     }
 
     /* Create the new image */

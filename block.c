@@ -4580,8 +4580,12 @@ void bdrv_img_create(const char *filename, const char *fmt,
     }
 
     if (!quiet) {
+	QEMUOptionParameter *scsi;
         printf("Formatting '%s', fmt=%s ", filename, fmt);
         print_option_parameters(param);
+	scsi = get_option_parameter(param, BLOCK_OPT_SCSI);
+	if (scsi && scsi->value.n)
+	    printf(", SCSI");
         puts("");
     }
     ret = bdrv_create(drv, filename, param);
