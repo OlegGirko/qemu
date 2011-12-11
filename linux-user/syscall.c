@@ -8690,6 +8690,11 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
         break;
 #endif
 
+#if defined(TARGET_NR_timer_create)
+    case TARGET_NR_timer_create:
+	goto unimplemented_nowarn;
+#endif
+
 #if defined(TARGET_NR_tkill) && defined(__NR_tkill)
     case TARGET_NR_tkill:
         ret = get_errno(sys_tkill((int)arg1, target_to_host_signal(arg2)));
