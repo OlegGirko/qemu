@@ -7609,7 +7609,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
         unlock_user(p, arg1, ret);
         break;
     case TARGET_NR_capget:
-        goto unimplemented;
+        goto unimplemented_nowarn;
     case TARGET_NR_capset:
         goto unimplemented;
     case TARGET_NR_sigaltstack:
