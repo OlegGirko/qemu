@@ -3626,6 +3626,13 @@ static abi_long do_ioctl_rt(const IOCTLEntry *ie, uint8_t *buf_temp,
     return ret;
 }
 
+static abi_long do_ioctl_fail(const IOCTLEntry *ie, uint8_t *buf_temp, int fd,
+                              abi_long cmd, abi_long arg)
+{
+    /* Fail silently */
+    return -EINVAL;
+}
+
 static IOCTLEntry ioctl_entries[] = {
 #define IOCTL(cmd, access, ...) \
     { TARGET_ ## cmd, cmd, #cmd, access, 0, {  __VA_ARGS__ } },
