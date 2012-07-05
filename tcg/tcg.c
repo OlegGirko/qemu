@@ -40,6 +40,8 @@
 #include "qemu/cache-utils.h"
 #include "qemu/host-utils.h"
 #include "qemu/timer.h"
+#include "config-host.h"
+#include "qemu/thread.h"
 
 /* Note: the long term plan is to reduce the dependancies on the QEMU
    CPU definitions. Currently they are used for qemu_ld/st
@@ -113,6 +115,29 @@ const size_t tcg_op_defs_max = ARRAY_SIZE(tcg_op_defs);
 
 static TCGRegSet tcg_target_available_regs[2];
 static TCGRegSet tcg_target_call_clobber_regs;
+
+#ifdef CONFIG_USER_ONLY
+static __thread int tcg_lock_count;
+#endif
+void tcg_lock(void)
+{
+#ifdef CONFIG_USER_ONLY
+    TCGContext *s = &tcg_ctx;
+    if (tcg_lock_count++ == 0) {
+        qemu_mutex_lock(&s->lock);
+    }
+#endif
+}
+
+void tcg_unlock(void)
+{
+#ifdef CONFIG_USER_ONLY
+    TCGContext *s = &tcg_ctx;
+    if (--tcg_lock_count == 0) {
+        qemu_mutex_unlock(&s->lock);
+    }
+#endif
+}
 
 static inline void tcg_out8(TCGContext *s, uint8_t v)
 {
@@ -253,7 +278,8 @@ void tcg_context_init(TCGContext *s)
 
     memset(s, 0, sizeof(*s));
     s->nb_globals = 0;
-    
+    qemu_mutex_init(&s->lock);
+
     /* Count total number of arguments and allocate the corresponding
        space */
     total_args = 0;
@@ -2379,11 +2405,13 @@ int tcg_gen_code(TCGContext *s, uint8_t *gen_code_buf)
     }
 #endif
 
+    tcg_lock();
     tcg_gen_code_common(s, gen_code_buf, -1);
 
     /* flush instruction cache */
     flush_icache_range((tcg_target_ulong)gen_code_buf,
                        (tcg_target_ulong)s->code_ptr);
+    tcg_unlock();
 
     return s->code_ptr -  gen_code_buf;
 }
@@ -2394,7 +2422,11 @@ int tcg_gen_code(TCGContext *s, uint8_t *gen_code_buf)
    Return -1 if not found. */
 int tcg_gen_code_search_pc(TCGContext *s, uint8_t *gen_code_buf, long offset)
 {
-    return tcg_gen_code_common(s, gen_code_buf, offset);
+    int r;
+    tcg_lock();
+    r = tcg_gen_code_common(s, gen_code_buf, offset);
+    tcg_unlock();
+    return r;
 }
 
 #ifdef CONFIG_PROFILER
