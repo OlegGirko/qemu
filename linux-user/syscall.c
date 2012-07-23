@@ -5011,6 +5011,25 @@ static int open_self_stat(void *cpu_env, int fd)
     return 0;
 }
 
+static int open_cpuinfo(void *cpu_env, int fd)
+{
+    dprintf(fd,
+"Processor       : ARMv7 Processor rev 5 (v7l)\n"
+"BogoMIPS        : 799.53\n"
+"Features        : swp half thumb fastmult vfp edsp thumbee neon vfpv3\n"
+"CPU implementer : 0x41\n"
+"CPU architecture: 7\n"
+"CPU variant     : 0x2\n"
+"CPU part        : 0xc08\n"
+"CPU revision    : 5\n"
+"\n"
+"Hardware        : Genesi Efika MX (Smarttop)\n"
+"Revision        : 51030\n"
+"Serial          : 0000000000000000\n");
+
+    return 0;
+}
+
 static int open_self_auxv(void *cpu_env, int fd)
 {
     TaskState *ts = ((CPUArchState *)cpu_env)->opaque;
@@ -5075,6 +5094,7 @@ static int do_open(void *cpu_env, const char *pathname, int flags, mode_t mode)
         { "maps", open_self_maps },
         { "stat", open_self_stat },
         { "auxv", open_self_auxv },
+        { "/proc/cpuinfo", open_cpuinfo },
         { NULL, NULL }
     };
 
@@ -5082,6 +5102,11 @@ static int do_open(void *cpu_env, const char *pathname, int flags, mode_t mode)
         if (is_proc_myself(pathname, fake_open->filename)) {
             break;
         }
+	if (fake_open->filename[0] == '/'
+	    && !strncmp(pathname, fake_open->filename,
+			strlen(fake_open->filename))) {
+	    break;
+	}
     }
 
     if (fake_open->filename) {
