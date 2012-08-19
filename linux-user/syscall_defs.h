@@ -2406,6 +2406,7 @@ struct target_eabi_flock64 {
 #define TARGET_MTIOCPOS        TARGET_IOR('m', 3, struct mtpos)
 
 #define TARGET_FS_IOC_GETFLAGS TARGET_IORU('f', 1)
+#define TARGET_FS_IOC_SETFLAGS TARGET_IOWU('f', 2)
 
 struct target_sysinfo {
     abi_long uptime;                /* Seconds since boot */
