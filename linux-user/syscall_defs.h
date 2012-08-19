@@ -2405,6 +2405,8 @@ struct target_eabi_flock64 {
 #define TARGET_MTIOCGET        TARGET_IOR('m', 2, struct mtget)
 #define TARGET_MTIOCPOS        TARGET_IOR('m', 3, struct mtpos)
 
+#define TARGET_FS_IOC_GETFLAGS TARGET_IORU('f', 1)
+
 struct target_sysinfo {
     abi_long uptime;                /* Seconds since boot */
     abi_ulong loads[3];             /* 1, 5, and 15 minute load averages */
