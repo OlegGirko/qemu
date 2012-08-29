@@ -44,6 +44,7 @@ static const struct timeval VNC_REFRESH_LOSSY = { 2, 0 };
 #include "d3des.h"
 
 static VncDisplay *vnc_display; /* needed for info vnc */
+static int allowed_connections = 0;
 
 static int vnc_cursor_define(VncState *vs);
 static void vnc_release_modifiers(VncState *vs);
@@ -1029,6 +1030,7 @@ static void vnc_disconnect_start(VncState *vs)
 void vnc_disconnect_finish(VncState *vs)
 {
     int i;
+    static int num_disconnects = 0;
 
     vnc_jobs_join(vs); /* Wait encoding jobs */
 
@@ -1077,6 +1079,13 @@ void vnc_disconnect_finish(VncState *vs)
     }
     g_free(vs->lossy_rect);
     g_free(vs);
+
+    num_disconnects++;
+    if (allowed_connections > 0 && allowed_connections <= num_disconnects) {
+        VNC_DEBUG("Maximum number of disconnects (%d) reached:"
+                  " Session terminating\n", allowed_connections);
+        exit(0);
+    }
 }
 
 int vnc_client_io_error(VncState *vs, int ret, int last_errno)
@@ -3036,6 +3045,39 @@ char *vnc_display_local_addr(DisplayState *ds)
     return vnc_socket_local_addr("%s:%s", vs->lsock);
 }
 
+static void read_file_password(DisplayState *ds, char *filename)
+{
+    FILE *pfile = NULL;
+    char *passwd = NULL;
+    int start = 0, length = 0, rc = 0;
+
+    if(strlen(filename) == 0) {
+	printf("No file supplied\n");
+	return;
+    }
+
+    pfile = fopen(filename, "r");
+    if(pfile == NULL) {
+	printf("Could not read from %s\n", filename);
+	return;
+    }
+
+    start  = ftell(pfile);
+    fseek(pfile, 0L, SEEK_END);
+    length = ftell(pfile);
+    fseek(pfile, 0L, start);
+
+    passwd = malloc(length+1);
+    rc = fread(passwd, 1, length, pfile);
+    fclose(pfile);
+
+    if(rc == length && rc > 0) {
+	vnc_display_password(ds, passwd);
+    }
+
+    free(passwd);
+}
+
 void vnc_display_open(DisplayState *ds, const char *display, Error **errp)
 {
     VncDisplay *vs = vnc_display;
@@ -3069,6 +3111,9 @@ void vnc_display_open(DisplayState *ds, const char *display, Error **errp)
     while ((options = strchr(options, ','))) {
         options++;
         if (strncmp(options, "password", 8) == 0) {
+            char *start, *end;
+            start = strchr(options, '=');
+            end = strchr(options, ',');
             if (fips_get_state()) {
                 error_setg(errp,
                            "VNC password auth disabled due to FIPS mode, "
@@ -3077,6 +3122,32 @@ void vnc_display_open(DisplayState *ds, const char *display, Error **errp)
                 goto fail;
             }
             password = 1; /* Require password auth */
+            if (start && (!end || (start < end))) {
+                int len = end ? end-(start+1) : strlen(start+1);
+                char *text = g_malloc(len+1);
+                strncpy(text, start+1, len);
+                text[len] = '\0';
+                
+                if (strncmp(options, "password-file=", 14) == 0) {
+                    read_file_password(ds, text);
+                } else {
+                    vnc_display_password(ds, text);
+                } 
+            
+                free(text);
+            }
+        } else if (strncmp(options, "allowed-connections=", 20) == 0) {
+            char *start, *end;
+            start = strchr(options, '=');
+            end = strchr(options, ',');
+            if (start && (!end || (start < end))) {
+                int len = end ? end-(start+1) : strlen(start+1);
+                char *text = g_malloc(len+1);
+                strncpy(text, start+1, len);
+                text[len] = '\0';
+                VNC_DEBUG("Maximum number of disconnects: %s\n", text);
+                allowed_connections = atoi(text);
+            }
         } else if (strncmp(options, "reverse", 7) == 0) {
             reverse = 1;
         } else if (strncmp(options, "no-lock-key-sync", 16) == 0) {
