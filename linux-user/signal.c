@@ -5703,6 +5703,16 @@ long do_rt_sigreturn(CPUArchState *env)
 
 #endif
 
+/* Wrapper for sigprocmask function
+ * Emulates a sigprocmask in a safe way for the guest. Note that set and oldset
+ * are host signal set, not guest ones. This wraps the sigprocmask host calls
+ * that should be protected (calls originated from guest)
+ */
+int do_sigprocmask(int how, const sigset_t *set, sigset_t *oldset)
+{
+    return sigprocmask(how, set, oldset);
+}
+
 void process_pending_signals(CPUArchState *cpu_env)
 {
     CPUState *cpu = ENV_GET_CPU(cpu_env);
