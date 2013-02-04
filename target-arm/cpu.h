@@ -89,6 +89,7 @@ typedef struct CPUARMState {
     /* Regs for A64 mode.  */
     uint64_t xregs[32];
     uint64_t pc;
+    uint64_t sp;
     /* Frequently accessed CPSR bits are stored separately for efficiency.
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */

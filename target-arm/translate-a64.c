@@ -36,12 +36,13 @@
 
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
+static TCGv_i64 cpu_sp;
 
 static const char *regnames[] =
     { "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
       "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
       "x16", "x17", "x18", "x19", "x20", "x21", "x22", "x23",
-      "x24", "x25", "x26", "x27", "x28", "x29", "lr", "sp" };
+      "x24", "x25", "x26", "x27", "x28", "x29", "lr", "xzr" };
 
 /* initialize TCG globals.  */
 void a64_translate_init(void)
@@ -51,6 +52,9 @@ void a64_translate_init(void)
     cpu_pc = tcg_global_mem_new_i64(TCG_AREG0,
                                     offsetof(CPUARMState, pc),
                                     "pc");
+    cpu_sp = tcg_global_mem_new_i64(TCG_AREG0,
+                                    offsetof(CPUARMState, sp),
+                                    "sp");
     for (i = 0; i < 32; i++) {
         cpu_X[i] = tcg_global_mem_new_i64(TCG_AREG0,
                                           offsetof(CPUARMState, xregs[i]),
@@ -63,15 +67,16 @@ void cpu_dump_state_a64(CPUARMState *env, FILE *f, fprintf_function cpu_fprintf,
 {
     int i;
 
-    cpu_fprintf(f, "PC=%016"PRIx64"\n", env->pc);
-    for(i = 0; i < 32; i++) {
+    cpu_fprintf(f, "PC=%016"PRIx64"  SP=%016"PRIx64"\n", env->pc, env->sp);
+    for(i = 0; i < 31; i++) {
         cpu_fprintf(f, "X%02d=%016"PRIx64, i, env->xregs[i]);
         if ((i % 4) == 3)
             cpu_fprintf(f, "\n");
         else
             cpu_fprintf(f, " ");
     }
-    cpu_fprintf(f, "\n");
+    cpu_fprintf(f, "XZR=%016"PRIx64, env->xregs[31]);
+    cpu_fprintf(f, "\n\n");
 }
 
 static int get_bits(uint32_t inst, int start, int len)
@@ -91,6 +96,21 @@ static int get_sbits(uint32_t inst, int start, int len)
 static int get_reg(uint32_t inst)
 {
     return get_bits(inst, 0, 5);
+}
+
+static void unallocated_encoding(DisasContext *s)
+{
+    tcg_abort();
+}
+
+static void reserved(DisasContext *s, uint32_t insn, int start, int len,
+                     uint32_t val)
+{
+    uint32_t field = get_bits(insn, start, len);
+    if (field != val) {
+        fprintf(stderr, "Broken ins: %08x %08x %08x", insn, field, val);
+        unallocated_encoding(s);
+    }
 }
 
 void gen_a64_set_pc_im(uint64_t val)
@@ -115,91 +135,218 @@ static void gen_exception_insn(DisasContext *s, int offset, int excp)
 
 static void handle_b(CPUARMState *env, DisasContext *s, uint32_t insn)
 {
-    uint64_t addr = s->pc + (get_bits(insn, 0, 26) << 2);
+    uint64_t addr = s->pc - 4 + (get_sbits(insn, 0, 26) << 2);
 
-    gen_a64_set_pc_im(addr - 4);
+    if (get_bits(insn, 31, 1)) {
+        /* BL */
+        tcg_gen_movi_i64(cpu_X[30], s->pc);
+    }
+    gen_a64_set_pc_im(addr);
     s->is_jmp = DISAS_JUMP;
-}
-
-static void handle_bl(CPUARMState *env, DisasContext *s, uint32_t insn)
-{
-    tcg_gen_movi_i64(cpu_X[30], s->pc);
-    handle_b(env, s, insn);
 }
 
 /* PC relative address calculation */
 static void handle_adr(CPUARMState *env, DisasContext *s, uint32_t insn)
 {
     int reg = get_reg(insn);
+    int is_page = get_bits(insn, 31, 1);
     uint64_t imm;
+    uint64_t base;
 
     imm = get_sbits(insn, 5, 19) << 2;
     imm |= get_bits(insn, 29, 2);
 
-    if (insn & 0x80000000) {
+    base = s->pc - 4;
+    if (is_page) {
         /* ADRP (page based) */
-        tcg_gen_movi_i64(cpu_X[reg], s->pc & ~0xfffULL);
+        base &= ~0xFFFULL;
         imm <<= 12;
-    } else {
-        tcg_gen_movi_i64(cpu_X[reg], s->pc);
     }
 
-    tcg_gen_addi_i64(cpu_X[reg], cpu_X[reg], imm);
-
-    /*
-      [0..4] = target reg
-      [5..23] = imm high
-      [29..30] = imm low
-    
-      addr = sign_extend([imm high] [imm low])
-      reg = pc + addr
-      if (page)
-          reg &= ~0xfff
-    */
-
+    tcg_gen_movi_i64(cpu_X[reg], base + imm);
 }
 
 static void handle_movi(CPUARMState *env, DisasContext *s, uint32_t insn)
 {
     int reg = get_reg(insn);
-    uint64_t imm;
+    uint64_t imm = get_bits(insn, 5, 16);
+    int is_32bit = !get_bits(insn, 31, 1);
+    int is_k = get_bits(insn, 29, 1);
+    int is_n = !get_bits(insn, 30, 1);
+    int pos = get_bits(insn, 21, 2) << 4;
+    TCGv_i64 tcg_imm;
 
-    /* XXX reserved bits */
+    reserved(s, insn, 23, 1, 1);
 
-    imm = get_bits(insn, 5, 16);
-    /* XXX multiply logic */
-    /* XXX flavors (movz, mov, ...) */
+    if (is_k && is_n) {
+        unallocated_encoding(s);
+    }
 
-    tcg_gen_movi_i64(cpu_X[reg], imm);
+    if (is_k) {
+        tcg_imm = tcg_const_i64(imm);
+        tcg_gen_deposit_i64(cpu_X[reg], cpu_X[reg], tcg_imm, pos, 16);
+        tcg_temp_free_i64(tcg_imm);
+    } else {
+        tcg_gen_movi_i64(cpu_X[reg], imm);
+    }
+
+    if (is_n) {
+        tcg_gen_not_i32(cpu_X[reg], cpu_X[reg]);
+    }
+
+    if (is_32bit) {
+        tcg_gen_andi_i64(cpu_X[reg], cpu_X[reg], 0xffffffff);
+    }
 }
 
-static void handle_mov(CPUARMState *env, DisasContext *s, uint32_t insn)
+static void handle_orri(CPUARMState *env, DisasContext *s, uint32_t insn)
 {
+    fprintf(stderr, "XXX orri\n");
+    unallocated_encoding(s);
+}
+
+static TCGv_i64 get_shift(int reg, int shift_type, int shift)
+{
+    TCGv_i64 r;
+
+    r = tcg_temp_new_i64();
+
+    if (!shift) {
+        tcg_gen_mov_i64(r, cpu_X[reg]);
+        return r;
+    }
+
+    /* XXX carry_out */
+    switch (shift_type) {
+    case 0: /* LSL */
+        tcg_gen_shli_i64(r, cpu_X[reg], shift);
+        break;
+    case 1: /* LSR */
+        tcg_gen_shri_i64(r, cpu_X[reg], shift);
+        break;
+    case 2: /* ASR */
+        tcg_gen_sari_i64(r, cpu_X[reg], shift);
+        break;
+    case 3:
+        tcg_gen_rotri_i64(r, cpu_X[reg], shift);
+        break;
+    }
+
+    return r;
+}
+
+static void handle_orr(CPUARMState *env, DisasContext *s, uint32_t insn)
+{
+    int is_32bit = !get_bits(insn, 31, 1);
     int dest = get_reg(insn);
-    int source = get_bits(insn, 10, 5);
+    int source = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 5);
+    int shift_amount = get_sbits(insn, 10, 6);
+    int is_n = !get_bits(insn, 21, 1);
+    int shift_type = !get_bits(insn, 22, 2);
+    int opc = !get_bits(insn, 22, 29);
+    bool setflags = (opc == 0x3);
+    TCGv_i64 tcg_op2;
 
-    /* XXX reserved bits */
-    /* XXX flavors */
+    if (is_32bit && (shift_amount < 0)) {
+        /* reserved value */
+        tcg_abort();
+    }
 
-    tcg_gen_mov_i64(cpu_X[dest], cpu_X[source]);
+    if (is_32bit) {
+        /* XXX handle 32 bit case */
+        tcg_abort();
+    }
+
+    /* MOV is dest = xzr & (source & ~0) */
+    if (!shift_amount && is_n && opc == 0x0 && source == 0x1f) {
+        tcg_gen_mov_i64(cpu_X[dest], cpu_X[rm]);
+        return;
+    }
+
+    tcg_op2 = get_shift(rm, shift_type, shift_amount);
+    if (is_n) {
+        tcg_gen_neg_i64(tcg_op2, tcg_op2);
+    }
+
+    switch (opc) {
+    case 0x0:
+    case 0x3:
+        tcg_gen_and_i64(cpu_X[dest], cpu_X[source], tcg_op2);
+        break;
+    case 0x1:
+        tcg_gen_or_i64(cpu_X[dest], cpu_X[source], tcg_op2);
+        break;
+    case 0x2:
+        tcg_gen_xor_i64(cpu_X[dest], cpu_X[source], tcg_op2);
+        break;
+    }
+
+    if (setflags) {
+        /* XXX set PSTATE.N,Z,C,V */
+        tcg_abort();
+    }
+
+    tcg_temp_free_i64(tcg_op2);
 }
 
 static void handle_stp(CPUARMState *env, DisasContext *s, uint32_t insn)
 {
-    int x1 = get_reg(insn);
-    int dest = get_bits(insn, 5, 5);
-    int x2 = get_bits(insn, 10, 5);
+    int rt = get_reg(insn);
+    int rn = get_bits(insn, 5, 5);
+    int rt2 = get_bits(insn, 10, 5);
     int offset = get_sbits(insn, 15, 7) << 3;
+    int is_load = get_bits(insn, 22, 1);
+    int is_vector = get_bits(insn, 26, 1);
+    int is_signed = get_bits(insn, 30, 1);
+    int is_32bit = !get_bits(insn, 31, 1);
     TCGv_i64 tcg_addr;
+    bool postindex = false;
+
+    if (is_signed && !is_32bit) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    if (is_vector) {
+        tcg_abort();
+    }
 
     /* XXX reserved bits */
     /* XXX flavors */
 
     tcg_addr = tcg_temp_new_i64();
-    tcg_gen_addi_i64(tcg_addr, cpu_X[dest], offset);
-    tcg_gen_qemu_st64(tcg_addr, cpu_X[x1], 1);
-    tcg_gen_addi_i64(tcg_addr, tcg_addr, 8);
-    tcg_gen_qemu_st64(tcg_addr, cpu_X[x2], 1);
+    if (rn == 31) {
+        /* XXX check SP alignment */
+        tcg_gen_mov_i64(tcg_addr, cpu_sp);
+    } else {
+        tcg_gen_mov_i64(tcg_addr, cpu_X[rn]);
+    }
+    if (!postindex) {
+        tcg_gen_addi_i64(tcg_addr, tcg_addr, offset);
+    }
+
+    if (is_load) {
+        if (is_32bit) {
+            tcg_gen_qemu_ld32u(cpu_X[rt], tcg_addr, 1);
+            tcg_gen_addi_i64(tcg_addr, tcg_addr, 4);
+            tcg_gen_qemu_ld32u(cpu_X[rt2], tcg_addr, 1);
+        } else {
+            tcg_gen_qemu_ld64(cpu_X[rt], tcg_addr, 1);
+            tcg_gen_addi_i64(tcg_addr, tcg_addr, 8);
+            tcg_gen_qemu_ld64(cpu_X[rt2], tcg_addr, 1);
+        }
+    } else {
+        if (is_32bit) {
+            tcg_gen_qemu_st32(tcg_addr, cpu_X[rt], 1);
+            tcg_gen_addi_i64(tcg_addr, tcg_addr, 4);
+            tcg_gen_qemu_st32(tcg_addr, cpu_X[rt2], 1);
+        } else {
+            tcg_gen_qemu_st64(tcg_addr, cpu_X[rt], 1);
+            tcg_gen_addi_i64(tcg_addr, tcg_addr, 8);
+            tcg_gen_qemu_st64(tcg_addr, cpu_X[rt2], 1);
+        }
+    }
     tcg_temp_free_i64(tcg_addr);
 }
 
@@ -296,20 +443,25 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 
     /* One-off branch instruction layout */
     switch ((insn & 0xfc000000) >> 26) {
+    case 0x25:
     case 0x5:
         handle_b(env, s, insn);
-        return;
-    case 0x25:
-        handle_bl(env, s, insn);
         return;
     }
 
     /* Typical major opcode encoding */
     switch ((insn >> 24) & 0x1f) {
     case 0x0a:
-        handle_mov(env, s, insn);
+        handle_orr(env, s, insn);
         break;
     case 0x09:
+        reserved(s, insn, 29, 1, 1);
+        reserved(s, insn, 23, 1, 0);
+        handle_stp(env, s, insn);
+        break;
+    case 0x0D:
+        reserved(s, insn, 29, 1, 1);
+        reserved(s, insn, 23, 1, 0);
         handle_stp(env, s, insn);
         break;
     case 0x10:
@@ -319,7 +471,11 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         handle_add(env, s, insn);
         break;
     case 0x12:
-        handle_movi(env, s, insn);
+        if (get_bits(insn, 23, 1)) {
+            handle_movi(env, s, insn);
+        } else {
+            handle_orri(env, s, insn);
+        }
         break;
     case 0x14:
         handle_svc(env, s, insn);
