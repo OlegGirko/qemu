@@ -3802,25 +3802,33 @@ uint32_t HELPER(pstate_addc32)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64
 
 uint32_t HELPER(cond)(uint32_t pstate, uint32_t cond)
 {
-    switch (cond) {
+    uint32_t r;
+
+    switch (cond >> 1) {
     case 0:
-        return pstate & PSTATE_Z;
+        r = pstate & PSTATE_Z;
     case 1:
-        return pstate & PSTATE_C;
+        r = pstate & PSTATE_C;
     case 2:
-        return pstate & PSTATE_N;
+        r = pstate & PSTATE_N;
     case 3:
-        return pstate & PSTATE_V;
+        r = pstate & PSTATE_V;
     case 4:
-        return (pstate & PSTATE_C) && !(pstate & PSTATE_V);
+        r = (pstate & PSTATE_C) && !(pstate & PSTATE_V);
     case 5:
-        return (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0));
+        r = (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0));
     case 6:
-        return (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0))
+        r = (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0))
                && !(pstate & PSTATE_Z);
     case 7:
     default:
         /* ALWAYS */
-        return 1;
+        r = 1;
     }
+
+    if ((cond & 0x8) && (cond != 0xf)) {
+        r = !r;
+    }
+
+    return r;
 }

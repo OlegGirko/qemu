@@ -230,7 +230,7 @@ static void handle_br(DisasContext *s, uint32_t insn)
 
 static void handle_condb(DisasContext *s, uint32_t insn)
 {
-    uint64_t addr = s->pc - 4 + (get_sbits(insn, 0, 19) << 2);
+    uint64_t addr = s->pc - 4 + (get_sbits(insn, 5, 19) << 2);
     int cond = get_bits(insn, 0, 4);
     int no_match;
     TCGv_i32 tcg_zero = tcg_const_i32(0);
@@ -257,7 +257,7 @@ static void handle_condb(DisasContext *s, uint32_t insn)
 
 static void handle_cb(DisasContext *s, uint32_t insn)
 {
-    uint64_t addr = s->pc - 4 + (get_sbits(insn, 5, 19) << 2);
+    uint64_t addr = s->pc - 4 + (get_sbits(insn, 0, 19) << 2);
     bool is_zero = get_bits(insn, 24, 1);
     int dest = get_reg(insn);
     int no_match;
@@ -799,13 +799,19 @@ static void handle_addi(DisasContext *s, uint32_t insn)
                                       tcg_imm, tcg_result);
             }
         }
+        if (is_32bit) {
+            tcg_gen_ext32u_i64(cpu_reg(dest), tcg_result);
+        } else {
+            tcg_gen_mov_i64(cpu_reg(dest), tcg_result);
+        }
+    } else {
+        if (is_32bit) {
+            tcg_gen_ext32u_i64(cpu_reg_sp(dest), tcg_result);
+        } else {
+            tcg_gen_mov_i64(cpu_reg_sp(dest), tcg_result);
+        }
     }
 
-    if (is_32bit) {
-        tcg_gen_ext32u_i64(cpu_reg_sp(dest), tcg_result);
-    } else {
-        tcg_gen_mov_i64(cpu_reg_sp(dest), tcg_result);
-    }
 }
 
 static void handle_svc(DisasContext *s, uint32_t insn)
