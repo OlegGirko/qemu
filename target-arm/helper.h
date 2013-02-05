@@ -458,4 +458,14 @@ DEF_HELPER_3(neon_qzip8, void, env, i32, i32)
 DEF_HELPER_3(neon_qzip16, void, env, i32, i32)
 DEF_HELPER_3(neon_qzip32, void, env, i32, i32)
 
+/************************ AArch64 ***********************/
+
+DEF_HELPER_FLAGS_4(pstate_add, TCG_CALL_NO_RWG_SE, i32, i32, i64, i64, i64)
+DEF_HELPER_FLAGS_4(pstate_add32, TCG_CALL_NO_RWG_SE, i32, i32, i64, i64, i64)
+DEF_HELPER_FLAGS_4(pstate_addc, TCG_CALL_NO_RWG_SE, i32, i32, i64, i64, i64)
+DEF_HELPER_FLAGS_4(pstate_addc32, TCG_CALL_NO_RWG_SE, i32, i32, i64, i64, i64)
+DEF_HELPER_FLAGS_2(cond, TCG_CALL_NO_RWG_SE, i32, i32, i32)
+
+
+
 #include "exec/def-helper.h"

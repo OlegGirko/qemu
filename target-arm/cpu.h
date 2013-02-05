@@ -90,6 +90,7 @@ typedef struct CPUARMState {
     uint64_t xregs[32];
     uint64_t pc;
     uint64_t sp;
+    uint32_t pstate;
     /* Frequently accessed CPSR bits are stored separately for efficiency.
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */
@@ -259,6 +260,11 @@ static inline bool is_a64(CPUARMState *env)
     return false;
 #endif
 }
+
+#define PSTATE_N  (1 << 0)
+#define PSTATE_Z  (1 << 1)
+#define PSTATE_C  (1 << 2)
+#define PSTATE_V  (1 << 3)
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero

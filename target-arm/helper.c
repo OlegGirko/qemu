@@ -3727,3 +3727,100 @@ float64 VFP_HELPER(muladd, d)(float64 a, float64 b, float64 c, void *fpstp)
     float_status *fpst = fpstp;
     return float64_muladd(a, b, c, 0, fpst);
 }
+
+
+
+/************************ AArch64 ***********************/
+
+uint32_t HELPER(pstate_add)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t ar)
+{
+    int64_t s1 = a1;
+    int64_t s2 = a2;
+    int64_t sr = ar;
+
+    pstate &= ~(PSTATE_N | PSTATE_Z | PSTATE_C | PSTATE_V);
+
+    if (sr < 0) {
+        pstate |= PSTATE_N;
+    }
+
+    if (!ar) {
+        pstate |= PSTATE_Z;
+    }
+
+    if (ar && (ar < a1)) {
+        pstate |= PSTATE_C;
+    }
+
+    if ((s1 > 0 && s2 > 0 && sr < 0) || (s1 < 0 && s2 < 0 && sr > 0)) {
+        pstate |= PSTATE_V;
+    }
+
+    return pstate;
+}
+
+uint32_t HELPER(pstate_add32)(uint32_t pstate, uint64_t x1, uint64_t x2, uint64_t xr)
+{
+    uint32_t a1 = x1;
+    uint32_t a2 = x2;
+    uint32_t ar = xr;
+
+    int32_t s1 = a1;
+    int32_t s2 = a2;
+    int32_t sr = ar;
+
+    pstate &= ~(PSTATE_N | PSTATE_Z | PSTATE_C | PSTATE_V);
+
+    if (sr < 0) {
+        pstate |= PSTATE_N;
+    }
+
+    if (!ar) {
+        pstate |= PSTATE_Z;
+    }
+
+    if (ar && (ar < a1)) {
+        pstate |= PSTATE_C;
+    }
+
+    if ((s1 > 0 && s2 > 0 && sr < 0) || (s1 < 0 && s2 < 0 && sr > 0)) {
+        pstate |= PSTATE_V;
+    }
+
+    return pstate;
+}
+
+uint32_t HELPER(pstate_addc)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t ar)
+{
+    return helper_pstate_add(pstate, a1, a2, ar + 1);
+}
+
+uint32_t HELPER(pstate_addc32)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t ar)
+{
+    return helper_pstate_add32(pstate, a1, a2, ar + 1);
+}
+
+uint32_t HELPER(cond)(uint32_t pstate, uint32_t cond)
+{
+    switch (cond) {
+    case 0:
+        return pstate & PSTATE_Z;
+    case 1:
+        return pstate & PSTATE_C;
+    case 2:
+        return pstate & PSTATE_N;
+    case 3:
+        return pstate & PSTATE_V;
+    case 4:
+        return (pstate & PSTATE_C) && !(pstate & PSTATE_V);
+    case 5:
+        return (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0));
+    case 6:
+        return (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0))
+               && !(pstate & PSTATE_Z);
+    case 7:
+    default:
+        /* ALWAYS */
+        return 1;
+    }
+}
