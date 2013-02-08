@@ -10118,6 +10118,9 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
         gen_set_condexec(dc);
         switch(dc->is_jmp) {
         case DISAS_NEXT:
+            if (is_a64(env)) {
+                gen_a64_set_pc_im(dc->pc);
+            }
             gen_goto_tb(dc, 1, dc->pc);
             break;
         default:

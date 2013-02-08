@@ -86,11 +86,15 @@ struct arm_boot_info;
 typedef struct CPUARMState {
     /* Regs for current mode.  */
     uint32_t regs[16];
+
     /* Regs for A64 mode.  */
     uint64_t xregs[32];
     uint64_t pc;
     uint64_t sp;
     uint32_t pstate;
+    /* 128-bit each */
+    float64 fregs[32 * 2];
+
     /* Frequently accessed CPSR bits are stored separately for efficiency.
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */
@@ -165,6 +169,12 @@ typedef struct CPUARMState {
         uint32_t c15_power_diagnostic;
         uint32_t c15_power_control; /* power control */
     } cp15;
+
+    /* System registers (AArch64) */
+    struct {
+        uint64_t tpidr_el0;
+        uint64_t tpidrro_el0;
+    } sr;
 
     struct {
         uint32_t other_sp;

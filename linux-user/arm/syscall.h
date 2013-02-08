@@ -27,7 +27,9 @@ struct target_pt_regs {
 #define ARM_r0		uregs[0]
 #define ARM_ORIG_r0	uregs[17]
 
-#else
+#define UNAME_MACHINE "aarch64"
+
+#else /* TARGET_ARM64 */
 
 /* this struct defines the way the registers are stored on the
    stack during a system call. */
@@ -55,7 +57,13 @@ struct target_pt_regs {
 #define ARM_r0		uregs[0]
 #define ARM_ORIG_r0	uregs[17]
 
+#if defined(TARGET_WORDS_BIGENDIAN)
+#define UNAME_MACHINE "armv5teb"
+#else
+#define UNAME_MACHINE "armv5tel"
 #endif
+
+#endif /* TARGET_ARM64 */
 
 #define ARM_SYSCALL_BASE	0x900000
 #define ARM_THUMB_SYSCALL	0
@@ -66,11 +74,5 @@ struct target_pt_regs {
 
 #define ARM_NR_semihosting	  0x123456
 #define ARM_NR_thumb_semihosting  0xAB
-
-#if defined(TARGET_WORDS_BIGENDIAN)
-#define UNAME_MACHINE "armv5teb"
-#else
-#define UNAME_MACHINE "armv5tel"
-#endif
 
 #define TARGET_CLONE_BACKWARDS

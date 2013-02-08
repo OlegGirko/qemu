@@ -3792,12 +3792,12 @@ uint32_t HELPER(pstate_add32)(uint32_t pstate, uint64_t x1, uint64_t x2, uint64_
 
 uint32_t HELPER(pstate_addc)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t ar)
 {
-    return helper_pstate_add(pstate, a1, a2, ar + 1);
+    return helper_pstate_add(pstate, a1, a2, ar);
 }
 
 uint32_t HELPER(pstate_addc32)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t ar)
 {
-    return helper_pstate_add32(pstate, a1, a2, ar + 1);
+    return helper_pstate_add32(pstate, a1, a2, ar);
 }
 
 uint32_t HELPER(cond)(uint32_t pstate, uint32_t cond)
@@ -3807,28 +3807,94 @@ uint32_t HELPER(cond)(uint32_t pstate, uint32_t cond)
     switch (cond >> 1) {
     case 0:
         r = pstate & PSTATE_Z;
+        break;
     case 1:
         r = pstate & PSTATE_C;
+        break;
     case 2:
         r = pstate & PSTATE_N;
+        break;
     case 3:
         r = pstate & PSTATE_V;
+        break;
     case 4:
         r = (pstate & PSTATE_C) && !(pstate & PSTATE_V);
+        break;
     case 5:
         r = (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0));
+        break;
     case 6:
         r = (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0))
                && !(pstate & PSTATE_Z);
+        break;
     case 7:
     default:
         /* ALWAYS */
         r = 1;
+        break;
     }
 
-    if ((cond & 0x8) && (cond != 0xf)) {
+    if ((cond & 1) && (cond != 0xf)) {
         r = !r;
+    }
+
+fprintf(stderr, "cond pstate=%x r = %d\n", pstate, r);
+
+    return r;
+}
+
+static int get_bits(uint32_t inst, int start, int len)
+{
+    return (inst >> start) & ((1 << len) - 1);
+}
+
+uint64_t HELPER(cinc)(uint32_t pstate, uint32_t insn, uint64_t n, uint64_t m)
+{
+    bool else_inc = get_bits(insn, 10, 1);
+    int cond = get_bits(insn, 12, 4);
+    bool else_inv = get_bits(insn, 30, 1);
+    bool is_32bit = !get_bits(insn, 31, 1);
+    uint64_t r;
+
+    if (helper_cond(pstate, cond)) {
+        r = n;
+        goto out;
+    }
+
+    r = m;
+    if (else_inv) {
+        r = ~r;
+    }
+    if (else_inc) {
+        r++;
+    }
+
+out:
+    if (is_32bit) {
+        r = (uint32_t)r;
     }
 
     return r;
 }
+
+void HELPER(tb_flush)(CPUARMState *env)
+{
+    tb_flush(env);
+}
+
+uint64_t HELPER(sign_extend)(uint64_t x, uint64_t is_signed, uint64_t mask)
+{
+    if (x & is_signed) {
+        x |= mask;
+    }
+
+    return x;
+}
+
+uint64_t HELPER(udiv64)(uint64_t num, uint64_t den)
+{
+    if (den == 0)
+      return 0;
+    return num / den;
+}
+

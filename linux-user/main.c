@@ -747,15 +747,15 @@ void cpu_loop(CPUARMState *env)
         case EXCP_BKPT:
             {
 #ifdef TARGET_ARM64
-                env->regs[0] = do_syscall(env,
-                                          env->xregs[8],
-                                          env->xregs[0],
-                                          env->xregs[1],
-                                          env->xregs[2],
-                                          env->xregs[3],
-                                          env->xregs[4],
-                                          env->xregs[5],
-                                          0, 0);
+                env->xregs[0] = do_syscall(env,
+                                           env->xregs[8],
+                                           env->xregs[0],
+                                           env->xregs[1],
+                                           env->xregs[2],
+                                           env->xregs[3],
+                                           env->xregs[4],
+                                           env->xregs[5],
+                                           0, 0);
 #else
 
                 env->eabi = 1;
