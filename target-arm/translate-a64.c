@@ -1153,6 +1153,34 @@ static void handle_udiv(DisasContext *s, uint32_t insn)
     gen_helper_udiv64(cpu_reg(rd), cpu_reg(rn), cpu_reg(rm));
 }
 
+static void handle_madd(DisasContext *s, uint32_t insn)
+{
+    int rd = get_reg(insn);
+    int rn = get_bits(insn, 5, 5);
+    int ra = get_bits(insn, 10, 5);
+    int rm = get_bits(insn, 16, 5);
+    bool sub_op = get_bits(insn, 15, 1);
+    bool is_32bit = !get_bits(insn, 31, 1);
+    TCGv_i64 tcg_tmp;
+
+    if (is_32bit) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    tcg_tmp = tcg_temp_new_i64();
+
+    tcg_gen_mul_i64(tcg_tmp, cpu_reg(rn), cpu_reg(rm));
+
+    if (sub_op) {
+        tcg_gen_sub_i64(cpu_reg(rd), cpu_reg(ra), tcg_tmp);
+    } else {
+        tcg_gen_add_i64(cpu_reg(rd), cpu_reg(ra), tcg_tmp);
+    }
+
+    tcg_temp_free_i64(tcg_tmp);
+}
+
 static void handle_extr(DisasContext *s, uint32_t insn)
 {
     unallocated_encoding(s);
@@ -1413,6 +1441,14 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
             break;
         } else if ((insn & 0x7fe0f800) == 0x1ac00800) {
             handle_udiv(s, insn);
+        } else {
+            goto unknown_insn;
+        }
+        break;
+    case 0x1b:
+        if ((insn & 0x7fe00000) == 0x1b000000) {
+            handle_madd(s, insn);
+            break;
         } else {
             goto unknown_insn;
         }
