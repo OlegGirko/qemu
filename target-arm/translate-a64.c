@@ -1138,7 +1138,7 @@ static void handle_udiv(DisasContext *s, uint32_t insn)
     int rn = get_bits(insn, 5, 5);
     int rm = get_bits(insn, 16, 5);
     bool is_signed = get_bits(insn, 10, 1);
-    bool is_32bit = get_bits(insn, 31, 1);
+    bool is_32bit = !get_bits(insn, 31, 1);
 
     if (is_signed) {
         unallocated_encoding(s);
