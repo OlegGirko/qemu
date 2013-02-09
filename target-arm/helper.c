@@ -3933,3 +3933,19 @@ uint64_t HELPER(udiv64)(uint64_t num, uint64_t den)
     return num / den;
 }
 
+uint64_t HELPER(umulh)(uint64_t n, uint64_t m)
+{
+    uint64_t rl, rh;
+
+    mulu64(&rl, &rh, n ,m);
+    return rh;
+}
+
+uint64_t HELPER(smulh)(uint64_t n, uint64_t m)
+{
+    uint64_t rl, rh;
+
+    muls64(&rl, &rh, n ,m);
+    return rh;
+}
+
