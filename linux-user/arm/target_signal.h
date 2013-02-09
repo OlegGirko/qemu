@@ -7,7 +7,7 @@
 
 typedef struct target_sigaltstack {
 	abi_ulong ss_sp;
-	abi_long ss_flags;
+	int ss_flags;
 	abi_ulong ss_size;
 } target_stack_t;
 
@@ -23,7 +23,11 @@ typedef struct target_sigaltstack {
 
 static inline abi_ulong get_sp_from_cpustate(CPUARMState *state)
 {
+#ifdef TARGET_ARM64
+   return state->sp;
+#else
    return state->regs[13];
+#endif
 }
 
 #endif /* TARGET_SIGNAL_H */
