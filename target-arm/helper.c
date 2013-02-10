@@ -3800,7 +3800,7 @@ uint32_t HELPER(pstate_sub)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t 
 
     pstate &= ~(PSTATE_C | PSTATE_V);
 
-    if (ar && (a2 <= a1)) {
+    if (a2 <= a1) {
         pstate |= PSTATE_C;
     }
 
@@ -3824,7 +3824,7 @@ uint32_t HELPER(pstate_sub32)(uint32_t pstate, uint64_t x1, uint64_t x2, uint64_
 
     pstate &= ~(PSTATE_C | PSTATE_V);
 
-    if (ar && (a2 <= a1)) {
+    if (a2 <= a1) {
         pstate |= PSTATE_C;
     }
 
@@ -3853,7 +3853,7 @@ uint32_t HELPER(cond)(uint32_t pstate, uint32_t cond)
         r = pstate & PSTATE_V;
         break;
     case 4:
-        r = (pstate & PSTATE_C) && !(pstate & PSTATE_V);
+        r = (pstate & PSTATE_C) && !(pstate & PSTATE_Z);
         break;
     case 5:
         r = (((pstate & PSTATE_N) ? 1 : 0) == ((pstate & PSTATE_V) ? 1 : 0));
@@ -3875,7 +3875,7 @@ uint32_t HELPER(cond)(uint32_t pstate, uint32_t cond)
 
 //fprintf(stderr, "cond pstate=%x r = %d\n", pstate, r);
 
-    return r;
+    return !!r;
 }
 
 static int get_bits(uint32_t inst, int start, int len)
