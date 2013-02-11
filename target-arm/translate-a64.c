@@ -246,17 +246,16 @@ static void handle_condb(DisasContext *s, uint32_t insn)
     gen_helper_cond(tcg_condmatch, pstate, tcg_cond);
     tcg_gen_brcond_i32(TCG_COND_EQ, tcg_condmatch, tcg_zero, no_match);
 
-    gen_a64_set_pc_im(addr);
-    tcg_gen_exit_tb(0);
+    gen_goto_tb(s, 0, addr);
 
     gen_set_label(no_match);
-    gen_a64_set_pc_im(s->pc);
+    gen_goto_tb(s, 1, s->pc);
 
     tcg_temp_free_i32(tcg_zero);
     tcg_temp_free_i32(tcg_cond);
     tcg_temp_free_i32(tcg_condmatch);
 
-    s->is_jmp = DISAS_JUMP;
+    s->is_jmp = DISAS_TB_JUMP;
 }
 
 static void handle_cb(DisasContext *s, uint32_t insn)
