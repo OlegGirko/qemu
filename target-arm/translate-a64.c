@@ -202,11 +202,7 @@ static void handle_b(DisasContext *s, uint32_t insn)
         tcg_gen_movi_i64(cpu_reg(30), s->pc);
     }
     gen_goto_tb(s, 0, addr);
-    if (unlikely(s->singlestep_enabled)) {
-        s->is_jmp = DISAS_JUMP;
-    } else {
-        s->is_jmp = DISAS_TB_JUMP;
-    }
+    s->is_jmp = DISAS_TB_JUMP;
 }
 
 static void handle_br(DisasContext *s, uint32_t insn)
@@ -609,7 +605,7 @@ static void handle_orr(DisasContext *s, uint32_t insn)
 
     tcg_op2 = get_shifti(rm, shift_type, shift_amount);
     if (is_n) {
-        tcg_gen_neg_i64(tcg_op2, tcg_op2);
+        tcg_gen_not_i64(tcg_op2, tcg_op2);
     }
 
     tcg_dest = cpu_reg(dest);
@@ -712,14 +708,15 @@ static void handle_add(DisasContext *s, uint32_t insn)
     bool is_32bit = !get_bits(insn, 31, 1);
     int extend_type = 0;
     TCGv_i64 tcg_op2;
-    TCGv_i64 tcg_src, tcg_dst;
+    TCGv_i64 tcg_src = tcg_temp_new_i64();
+    TCGv_i64 tcg_dst;
     TCGv_i64 tcg_result = tcg_temp_new_i64();
 
     if (extend && shift_type) {
         unallocated_encoding(s);
     }
 
-    tcg_src = cpu_reg(source);
+    tcg_gen_mov_i64(tcg_src, cpu_reg(source));
     tcg_dst = cpu_reg(dest);
     if (extend) {
         extend_type = get_bits(insn, 13, 3);
@@ -728,7 +725,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
             unallocated_encoding(s);
         }
         if (!setflags) {
-            tcg_src = cpu_reg_sp(source);
+            tcg_gen_mov_i64(tcg_src, cpu_reg_sp(source));
             tcg_dst = cpu_reg_sp(dest);
         }
     } else {
@@ -749,6 +746,11 @@ static void handle_add(DisasContext *s, uint32_t insn)
         tcg_op2 = get_shifti(rm, shift_type, shift_amount);
     }
 
+    if (is_32bit) {
+        tcg_gen_ext32s_i64(tcg_src, tcg_src);
+        tcg_gen_ext32s_i64(tcg_op2, tcg_op2);
+    }
+
     if (sub_op) {
         tcg_gen_sub_i64(tcg_result, tcg_src, tcg_op2);
     } else {
@@ -765,6 +767,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
         tcg_gen_mov_i64(tcg_dst, tcg_result);
     }
 
+    tcg_temp_free_i64(tcg_src);
     tcg_temp_free_i64(tcg_op2);
     tcg_temp_free_i64(tcg_result);
 }
@@ -1720,6 +1723,11 @@ unknown_insn:
         printf("unknown insn: %08x\n", insn);
         unallocated_encoding(s);
         break;
+    }
+
+    if (unlikely(s->singlestep_enabled) && (s->is_jmp == DISAS_TB_JUMP)) {
+        /* go through the main loop for single step */
+        s->is_jmp = DISAS_JUMP;
     }
 
 #ifdef DEBUG_FLUSH

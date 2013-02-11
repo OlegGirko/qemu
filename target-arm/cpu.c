@@ -839,8 +839,13 @@ static void arm_cpu_class_init(ObjectClass *oc, void *data)
     cc->get_phys_page_debug = arm_cpu_get_phys_page_debug;
     cc->vmsd = &vmstate_arm_cpu;
 #endif
+#ifdef TARGET_ARM64
+    cc->gdb_num_core_regs = 34;
+    cc->gdb_core_xml_file = "aarch64-core.xml";
+#else
     cc->gdb_num_core_regs = 26;
     cc->gdb_core_xml_file = "arm-core.xml";
+#endif
 }
 
 static void cpu_register(const ARMCPUInfo *info)

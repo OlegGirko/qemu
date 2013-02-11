@@ -4249,7 +4249,8 @@ case "$target_name" in
     TARGET_ABI_DIR=arm
     bflt="yes"
     target_nptl="yes"
-    gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
+    gdb_xml_files="aarch64-core.xml aarch64-fpu.xml"
+#gdb-xml/aarch64-core.xml  gdb-xml/aarch64-fpu.xml  gdb-xml/aarch64-without-fpu.xml  gdb-xml/aarch64.xml
     #gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml"
     target_long_alignment=8
     target_libs_softmmu="$fdt_libs"

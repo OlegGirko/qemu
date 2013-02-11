@@ -21,6 +21,62 @@
 #include "qemu-common.h"
 #include "exec/gdbstub.h"
 
+#ifdef TARGET_ARM64
+int arm_cpu_gdb_read_register(CPUState *cs, uint8_t *mem_buf, int n)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+
+    if (n < 31) {
+        /* Core integer register.  */
+        gdb_get_reg64(mem_buf, env->xregs[n]);
+    }
+    switch (n) {
+    case 31:
+        gdb_get_reg64(mem_buf, env->sp);
+        break;
+    case 32:
+        gdb_get_reg64(mem_buf, env->pc);
+        break;
+    case 33:
+        gdb_get_reg32(mem_buf, env->pstate);
+        break;
+    }
+    /* Unknown register.  */
+    return 0;
+}
+
+int arm_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
+{
+    ARMCPU *cpu = ARM_CPU(cs);
+    CPUARMState *env = &cpu->env;
+    uint64_t tmp;
+
+    tmp = ldq_p(mem_buf);
+
+    if (n < 31) {
+        /* Core integer register.  */
+        env->xregs[n] = tmp;
+        return 8;
+    }
+    switch (n) {
+    case 31:
+        env->sp = tmp;
+        return 8;
+    case 32:
+        env->pc = tmp;
+        return 8;
+    case 33:
+        /* CPSR */
+        env->pstate = tmp;
+        //cpsr_write (env, tmp, 0xffffffff);
+        return 4;
+    }
+    /* Unknown register.  */
+    return 0;
+}
+#else
+
 /* Old gdb always expect FPA registers.  Newer (xml-aware) gdb only expect
    whatever the target description contains.  Due to a historical mishap
    the FPA registers appear in between core integer regs and the CPSR.
@@ -100,3 +156,4 @@ int arm_cpu_gdb_write_register(CPUState *cs, uint8_t *mem_buf, int n)
     /* Unknown register.  */
     return 0;
 }
+#endif
