@@ -282,13 +282,12 @@ static void handle_cb(DisasContext *s, uint32_t insn)
     } else {
         tcg_gen_brcond_i64(TCG_COND_EQ, tcg_cmp, tcg_zero, no_match);
     }
-    gen_a64_set_pc_im(addr);
-    tcg_gen_exit_tb(0);
+    gen_goto_tb(s, 0, addr);
 
     gen_set_label(no_match);
-    gen_a64_set_pc_im(s->pc);
+    gen_goto_tb(s, 1, s->pc);
 
-    s->is_jmp = DISAS_JUMP;
+    s->is_jmp = DISAS_TB_JUMP;
 
     tcg_temp_free_i64(tcg_cmp);
     tcg_temp_free_i64(tcg_zero);
@@ -314,16 +313,16 @@ static void handle_tbz(DisasContext *s, uint32_t insn)
     } else {
         tcg_gen_brcond_i64(TCG_COND_EQ, tcg_cmp, tcg_mask, no_match);
     }
-    gen_a64_set_pc_im(addr);
+    gen_goto_tb(s, 0, addr);
     tcg_gen_exit_tb(0);
 
     gen_set_label(no_match);
-    gen_a64_set_pc_im(s->pc);
+    gen_goto_tb(s, 1, s->pc);
 
     tcg_temp_free_i64(tcg_cmp);
     tcg_temp_free_i64(tcg_mask);
 
-    s->is_jmp = DISAS_JUMP;
+    s->is_jmp = DISAS_TB_JUMP;
 }
 
 static void handle_cinc(DisasContext *s, uint32_t insn)
