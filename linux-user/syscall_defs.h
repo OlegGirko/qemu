@@ -1835,7 +1835,7 @@ struct target_stat {
 
   	abi_long	__unused[3];
 };
-#elif defined(TARGET_S390X) || defined(TARGET_ARM64)
+#elif defined(TARGET_S390X)
 struct target_stat {
     abi_ulong  st_dev;
     abi_ulong  st_ino;
@@ -1855,6 +1855,28 @@ struct target_stat {
     abi_ulong  st_blksize;
     abi_long       st_blocks;
     abi_ulong  __unused[3];
+};
+#elif defined(TARGET_ARM64)
+struct target_stat {
+    abi_ulong  st_dev;
+    abi_ulong  st_ino;
+    unsigned int st_mode;
+    unsigned int st_nlink;
+    unsigned int   st_uid;
+    unsigned int   st_gid;
+    abi_ulong  st_rdev;
+    abi_ulong  _pad1;
+    abi_long  st_size;
+    int        st_blksize;
+    int        __pad2;
+    abi_long   st_blocks;
+    abi_long  target_st_atime;
+    abi_ulong  target_st_atime_nsec;
+    abi_long  target_st_mtime;
+    abi_ulong  target_st_mtime_nsec;
+    abi_long  target_st_ctime;
+    abi_ulong  target_st_ctime_nsec;
+    unsigned int __unused[2];
 };
 #elif defined(TARGET_OPENRISC)
 
@@ -1965,7 +1987,8 @@ struct target_statfs64 {
 	uint32_t	f_spare[6];
 };
 #elif (defined(TARGET_PPC64) || defined(TARGET_X86_64) || \
-       defined(TARGET_SPARC64)) && !defined(TARGET_ABI32)
+       defined(TARGET_SPARC64) || defined(TARGET_ARM64)) && \
+       !defined(TARGET_ABI32)
 struct target_statfs {
 	abi_long f_type;
 	abi_long f_bsize;
@@ -1993,8 +2016,7 @@ struct target_statfs64 {
 	abi_long f_frsize;
 	abi_long f_spare[5];
 };
-// XXX verify that this is correct
-#elif defined(TARGET_S390X) || defined(TARGET_ARM64)
+#elif defined(TARGET_S390X)
 struct target_statfs {
     int32_t  f_type;
     int32_t  f_bsize;

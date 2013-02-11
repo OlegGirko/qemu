@@ -21,10 +21,15 @@
 
 static inline void cpu_clone_regs(CPUARMState *env, target_ulong newsp)
 {
-    if (newsp) {
-        env->regs[13] = newsp;
+    if (is_a64(env)) {
+	if (newsp)
+	  env->sp = newsp;
+	env->xregs[0] = 0;
+    } else {
+	if (newsp)
+	  env->regs[13] = newsp;
+	env->regs[0] = 0;
     }
-    env->regs[0] = 0;
 }
 
 static inline void cpu_set_tls(CPUARMState *env, target_ulong newtls)

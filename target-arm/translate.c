@@ -9982,6 +9982,7 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
         store_cpu_field(tmp, condexec_bits);
       }
     do {
+        if (!is_a64(env)) {
 #ifdef CONFIG_USER_ONLY
         /* Intercept jump to the magic kernel page.  */
         if (dc->pc >= 0xffff0000) {
@@ -10000,6 +10001,7 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
             break;
         }
 #endif
+        }
 
         if (unlikely(!QTAILQ_EMPTY(&env->breakpoints))) {
             QTAILQ_FOREACH(bp, &env->breakpoints, entry) {

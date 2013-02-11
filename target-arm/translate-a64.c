@@ -35,8 +35,8 @@
 #define GEN_HELPER 1
 #include "helper.h"
 
-#define DEBUG_SINGLESTEP 1
-#define DEBUG_FLUSH 1
+// #define DEBUG_SINGLESTEP 1
+// #define DEBUG_FLUSH 1
 
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
@@ -604,7 +604,7 @@ static void handle_orr(DisasContext *s, uint32_t insn)
             tcg_gen_mov_i64(cpu_reg_sp(dest), cpu_reg(rm));
         }
         if (is_n) {
-            tcg_gen_neg_i64(cpu_reg_sp(dest), cpu_reg_sp(dest));
+            tcg_gen_not_i64(cpu_reg_sp(dest), cpu_reg_sp(dest));
         }
         return;
     }
@@ -725,8 +725,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
     tcg_dst = cpu_reg(dest);
     if (extend) {
         extend_type = get_bits(insn, 13, 3);
-        shift_amount &= 0x7;
-        if (shift_amount > 4) {
+        if ((shift_amount & 0x7) > 4) {
             /* reserved value */
             unallocated_encoding(s);
         }
@@ -739,11 +738,10 @@ static void handle_add(DisasContext *s, uint32_t insn)
             /* reserved value */
             unallocated_encoding(s);
         }
-    }
-
-    if (is_32bit && (shift_amount < 0)) {
-        /* reserved value */
-        unallocated_encoding(s);
+        if (is_32bit && (shift_amount < 0)) {
+            /* reserved value */
+            unallocated_encoding(s);
+        }
     }
 
     if (extend) {
@@ -1014,7 +1012,7 @@ static void ldst_calc_index(DisasContext *s, TCGv_i64 tcg_addr,
                             bool is_reg_offset, int offset, int size)
 {
     int option = get_bits(offset, 1, 3);
-    bool is_shift = get_bits(offset, 0, 1) && (option == 3);
+    bool is_shift = get_bits(offset, 0, 1);
     int shift = size;
     int rn = get_bits(offset, 4, 5);
     TCGv_i64 tcg_offset;
@@ -1173,6 +1171,34 @@ static void handle_lslv(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_shifted);
 }
 
+static void handle_rev(DisasContext *s, uint32_t insn)
+{
+    int rd = get_reg(insn);
+    int rn = get_bits(insn, 5, 5);
+    int opc = get_bits(insn, 10, 2);
+    bool is_32bit = !get_bits(insn, 31, 1);
+
+    switch (opc) {
+    case 0x0: /* RBIT */
+        /* XXX */
+        unallocated_encoding(s);
+        break;
+    case 0x1: /* REV16 */
+        tcg_gen_bswap16_i64(cpu_reg(rd), cpu_reg(rn));
+        break;
+    case 0x2: /* REV32 */
+        tcg_gen_bswap32_i64(cpu_reg(rd), cpu_reg(rn));
+        break;
+    case 0x3: /* REV64 */
+        tcg_gen_bswap64_i64(cpu_reg(rd), cpu_reg(rn));
+        break;
+    }
+
+    if (is_32bit) {
+        tcg_gen_ext32u_i64(cpu_reg(rd), cpu_reg(rd));
+    }
+}
+
 static void handle_mulh(DisasContext *s, uint32_t insn)
 {
     int rd = get_reg(insn);
@@ -1194,23 +1220,65 @@ static void handle_udiv(DisasContext *s, uint32_t insn)
     int rm = get_bits(insn, 16, 5);
     bool is_signed = get_bits(insn, 10, 1);
     bool is_32bit = !get_bits(insn, 31, 1);
+    TCGv_i64 n = tcg_temp_new_i64();
+    TCGv_i64 m = tcg_temp_new_i64();
+
+    if (is_32bit) {
+        if (is_signed) {
+            tcg_gen_ext32s_i64(n, cpu_reg(rn));
+            tcg_gen_ext32s_i64(m, cpu_reg(rm));
+        } else {
+            tcg_gen_ext32u_i64(n, cpu_reg(rn));
+            tcg_gen_ext32u_i64(m, cpu_reg(rm));
+        }
+    } else {
+        tcg_gen_mov_i64(n, cpu_reg(rn));
+        tcg_gen_mov_i64(m, cpu_reg(rm));
+    }
 
     if (is_signed) {
-        unallocated_encoding(s);
-        return;
+        gen_helper_sdiv64(cpu_reg(rd), n, m);
+    } else {
+        gen_helper_udiv64(cpu_reg(rd), n, m);
     }
 
     if (is_32bit) {
-        unallocated_encoding(s);
-        return;
+        if (is_signed) {
+            tcg_gen_ext32s_i64(cpu_reg(rd), cpu_reg(rd));
+        } else {
+            tcg_gen_ext32u_i64(cpu_reg(rd), cpu_reg(rd));
+        }
     }
 
-    gen_helper_udiv64(cpu_reg(rd), cpu_reg(rn), cpu_reg(rm));
+    tcg_temp_free_i64(n);
+    tcg_temp_free_i64(m);
 }
 
 static void handle_extr(DisasContext *s, uint32_t insn)
 {
-    unallocated_encoding(s);
+    int rd = get_reg(insn);
+    int rn = get_bits(insn, 5, 5);
+    int imms = get_bits(insn, 10, 6);
+    int rm = get_bits(insn, 16, 5);
+    bool is_32bit = !get_bits(insn, 31, 1);
+    int bitsize = is_32bit ? 32 : 64;
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    TCGv_i64 tcg_tmp = tcg_temp_new_i64();
+
+    if (is_32bit) {
+        tcg_gen_ext32u_i64(tcg_tmp, cpu_reg(rm));
+    } else {
+        tcg_gen_mov_i64(tcg_tmp, cpu_reg(rm));
+    }
+    tcg_gen_shri_i64(tcg_res, cpu_reg(rm), imms);
+    tcg_gen_shli_i64(tcg_tmp, cpu_reg(rn), bitsize - imms);
+    tcg_gen_or_i64(cpu_reg(rd), tcg_tmp, tcg_res);
+    if (is_32bit) {
+        tcg_gen_ext32u_i64(cpu_reg(rd), cpu_reg(rd));
+    }
+
+    tcg_temp_free_i64(tcg_tmp);
+    tcg_temp_free_i64(tcg_res);
 }
 
 /* Verified against test case -agraf */
@@ -1368,7 +1436,6 @@ static void handle_dp3s(DisasContext *s, uint32_t insn)
     bool is_high = op_id & 0x4;
     TCGv_i64 tcg_op1;
     TCGv_i64 tcg_op2;
-    TCGv_i64 tcg_op3;
     TCGv_i64 tcg_tmp;
 
     switch (op_id) {
@@ -1394,25 +1461,22 @@ static void handle_dp3s(DisasContext *s, uint32_t insn)
 
     tcg_op1 = tcg_temp_new_i64();
     tcg_op2 = tcg_temp_new_i64();
-    tcg_op3 = tcg_temp_new_i64();
     tcg_tmp = tcg_temp_new_i64();
 
     if (is_signed) {
-        tcg_gen_ext32u_i64(tcg_op1, cpu_reg(rn));
-        tcg_gen_ext32u_i64(tcg_op2, cpu_reg(rm));
-        tcg_gen_ext32u_i64(tcg_op3, cpu_reg(ra));
-    } else {
         tcg_gen_ext32s_i64(tcg_op1, cpu_reg(rn));
         tcg_gen_ext32s_i64(tcg_op2, cpu_reg(rm));
-        tcg_gen_ext32s_i64(tcg_op3, cpu_reg(ra));
+    } else {
+        tcg_gen_ext32u_i64(tcg_op1, cpu_reg(rn));
+        tcg_gen_ext32u_i64(tcg_op2, cpu_reg(rm));
     }
 
     tcg_gen_mul_i64(tcg_tmp, tcg_op1, tcg_op2);
 
     if (is_sub) {
-        tcg_gen_sub_i64(cpu_reg(rd), tcg_op3, tcg_tmp);
+        tcg_gen_sub_i64(cpu_reg(rd), cpu_reg(ra), tcg_tmp);
     } else {
-        tcg_gen_add_i64(cpu_reg(rd), tcg_op3, tcg_tmp);
+        tcg_gen_add_i64(cpu_reg(rd), cpu_reg(ra), tcg_tmp);
     }
 
     if (is_32bit) {
@@ -1421,8 +1485,83 @@ static void handle_dp3s(DisasContext *s, uint32_t insn)
 
     tcg_temp_free_i64(tcg_op1);
     tcg_temp_free_i64(tcg_op2);
-    tcg_temp_free_i64(tcg_op3);
     tcg_temp_free_i64(tcg_tmp);
+}
+
+/* fixed <-> floating conversion */
+static void handle_fpfpconv(DisasContext *s, uint32_t insn)
+{
+#if 0
+    int rd = get_reg(insn);
+    int rn = get_bits(insn, 5, 5);
+    int scale = get_bits(insn, 10, 6);
+    int opcode = get_bits(insn, 16, 3);
+    int rmode = get_bits(insn, 20, 2);
+    int type = get_bits(insn, 22, 2);
+    bool is_s = get_bits(insn, 29, 1);
+    bool is_32bit = !get_bits(insn, 31, 1);
+#endif
+
+    unallocated_encoding(s);
+}
+
+/* floating <-> integer conversion */
+static void handle_fpintconv(DisasContext *s, uint32_t insn)
+{
+    int rd = get_reg(insn);
+    int rn = get_bits(insn, 5, 5);
+    int opcode = get_bits(insn, 16, 3);
+    int rmode = get_bits(insn, 19, 2);
+    int type = get_bits(insn, 22, 2);
+    bool is_s = get_bits(insn, 29, 1);
+    bool is_32bit = !get_bits(insn, 31, 1);
+
+    if (!is_s && (rmode < 2) && (opcode > 5)) {
+        /* FMOV */
+        bool itof = opcode & 1;
+        int dest = itof ? rd : rn;
+        int freg_offs = offsetof(CPUARMState, fregs[0]) + dest * 2;
+
+        if (rmode & 1) {
+            /* XXX upper Q part */
+        }
+
+        switch (type |
+                ((rmode & 1) ? 0x4 : 0) |
+                (itof ? 0x8 : 0)) {
+        case 0x0:
+            tcg_gen_ld32u_i64(cpu_reg(rd), cpu_env, freg_offs + sizeof(float32));
+            break;
+        case 0x1:
+            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
+            break;
+        case 0x2:
+            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
+            break;
+        case 0x4:
+            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs + sizeof(float64));
+            break;
+        case 0x8:
+            tcg_gen_st32_i64(cpu_reg(rn), cpu_env, freg_offs + sizeof(float32));
+            break;
+        case 0x9:
+            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
+            break;
+        case 0xa:
+            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
+            break;
+        case 0xc:
+            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs + sizeof(float64));
+            break;
+        }
+
+        if (is_32bit && !itof) {
+            tcg_gen_ext32u_i64(cpu_reg(rd), cpu_reg(rd));
+        }
+    } else {
+        /* XXX */
+        unallocated_encoding(s);
+    }
 }
 
 void disas_a64_insn(CPUARMState *env, DisasContext *s)
@@ -1489,7 +1628,8 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         }
         break;
     case 0x13:
-        if (get_bits(insn, 23, 1)) {
+        if (get_bits(insn, 23, 1) && !get_bits(insn, 21, 1) &&
+            !get_bits(insn, 29, 2)) {
             handle_extr(s, insn);
         } else {
             handle_bfm(s, insn);
@@ -1513,20 +1653,22 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         if (get_bits(insn, 29, 2) == 0x1) {
             handle_cb(s, insn);
             break;
-        }
-        if (get_bits(insn, 20, 12) == 0xd53) {
+        } else if (get_bits(insn, 20, 12) == 0xd53) {
             handle_mrs(s, insn);
             break;
-        }
-        if (get_bits(insn, 20, 12) == 0xd51) {
+        } else if (get_bits(insn, 20, 12) == 0xd51) {
             handle_msr(s, insn);
             break;
-        }
-        if ((insn & 0xfffff09f) == 0xd503309f) {
+        } else if ((insn & 0xfffff01f) == 0xd503201f) {
+            /* HINT instructions */
+            break;
+        } else if ((insn & 0xfffff09f) == 0xd503309f) {
             /* barrier instructions */
             break;
+        } else {
+            goto unknown_insn;
         }
-        goto unknown_insn;
+        break;
     case 0x16:
     case 0x17:
         if (get_bits(insn, 29, 2) == 0x1) {
@@ -1551,12 +1693,24 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
             handle_udiv(s, insn);
         } else if ((insn & 0x7fe0f000) == 0x1ac02000) {
             handle_lslv(s, insn);
+        } else if ((insn & 0x7ffff000) == 0x5ac00000) {
+            handle_rev(s, insn);
         } else {
             goto unknown_insn;
         }
         break;
     case 0x1b:
         handle_dp3s(s, insn);
+        break;
+    case 0x1e:
+        if (!get_bits(insn, 21, 1) && !get_bits(insn, 30, 1)) {
+            handle_fpfpconv(s, insn);
+        } else if (get_bits(insn, 21, 1) && !get_bits(insn, 30, 1) &&
+                   !get_bits(insn, 10, 6)) {
+            handle_fpintconv(s, insn);
+        } else {
+            goto unknown_insn;
+        }
         break;
     default:
 unknown_insn:
