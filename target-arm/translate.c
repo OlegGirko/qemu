@@ -9898,7 +9898,7 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
     uint16_t *gen_opc_end;
     int j, lj;
     target_ulong pc_start;
-    uint32_t next_page_start;
+    target_ulong next_page_start;
     int num_insns;
     int max_insns;
 

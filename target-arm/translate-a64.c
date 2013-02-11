@@ -297,7 +297,7 @@ static void handle_tbz(DisasContext *s, uint32_t insn)
 {
     uint64_t addr = s->pc - 4 + (get_sbits(insn, 5, 14) << 2);
     bool is_one = get_bits(insn, 24, 1);
-    int shift = get_bits(insn, 19, 5);
+    int shift = get_bits(insn, 19, 5) | (get_bits(insn, 31, 1) << 5);
     int source = get_reg(insn);
     int no_match;
     uint64_t mask = 1ULL << shift;
@@ -1461,12 +1461,17 @@ static void handle_dp3s(DisasContext *s, uint32_t insn)
     tcg_op2 = tcg_temp_new_i64();
     tcg_tmp = tcg_temp_new_i64();
 
-    if (is_signed) {
-        tcg_gen_ext32s_i64(tcg_op1, cpu_reg(rn));
-        tcg_gen_ext32s_i64(tcg_op2, cpu_reg(rm));
+    if (op_id < 0x42) {
+        tcg_gen_mov_i64(tcg_op1, cpu_reg(rn));
+        tcg_gen_mov_i64(tcg_op2, cpu_reg(rm));
     } else {
-        tcg_gen_ext32u_i64(tcg_op1, cpu_reg(rn));
-        tcg_gen_ext32u_i64(tcg_op2, cpu_reg(rm));
+        if (is_signed) {
+            tcg_gen_ext32s_i64(tcg_op1, cpu_reg(rn));
+            tcg_gen_ext32s_i64(tcg_op2, cpu_reg(rm));
+        } else {
+            tcg_gen_ext32u_i64(tcg_op1, cpu_reg(rn));
+            tcg_gen_ext32u_i64(tcg_op2, cpu_reg(rm));
+        }
     }
 
     tcg_gen_mul_i64(tcg_tmp, tcg_op1, tcg_op2);
