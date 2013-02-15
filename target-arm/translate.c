@@ -971,17 +971,17 @@ static inline void gen_vfp_sqrt(int dp)
 static inline void gen_vfp_cmp(int dp)
 {
     if (dp)
-        gen_helper_vfp_cmpd(cpu_F0d, cpu_F1d, cpu_env);
+        gen_helper_vfp_fpscr_cmpd(cpu_F0d, cpu_F1d, cpu_env);
     else
-        gen_helper_vfp_cmps(cpu_F0s, cpu_F1s, cpu_env);
+        gen_helper_vfp_fpscr_cmps(cpu_F0s, cpu_F1s, cpu_env);
 }
 
 static inline void gen_vfp_cmpe(int dp)
 {
     if (dp)
-        gen_helper_vfp_cmped(cpu_F0d, cpu_F1d, cpu_env);
+        gen_helper_vfp_fpscr_cmped(cpu_F0d, cpu_F1d, cpu_env);
     else
-        gen_helper_vfp_cmpes(cpu_F0s, cpu_F1s, cpu_env);
+        gen_helper_vfp_fpscr_cmpes(cpu_F0s, cpu_F1s, cpu_env);
 }
 
 static inline void gen_vfp_F1_ld0(int dp)
