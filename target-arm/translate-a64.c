@@ -143,6 +143,15 @@ static TCGv_ptr get_fpstatus_ptr(void)
     return statusptr;
 }
 
+static void clear_fpreg(int dest)
+{
+    int freg_offs = offsetof(CPUARMState, vfp.regs[dest * 2]);
+    TCGv_i64 tcg_zero = tcg_const_i64(0);
+
+    tcg_gen_st_i64(tcg_zero, cpu_env, freg_offs);
+    tcg_gen_st_i64(tcg_zero, cpu_env, freg_offs + sizeof(float64));
+}
+
 static int get_mem_index(DisasContext *s)
 {
     /* XXX only user mode for now */
@@ -821,6 +830,7 @@ static void ldst_do_vec(DisasContext *s, int dest, TCGv_i64 tcg_addr_real,
             break;
         }
     } else {
+        clear_fpreg(dest);
         switch (size) {
         case 0:
             tcg_gen_qemu_ld8u(tcg_tmp, tcg_addr, get_mem_index(s));
@@ -1573,6 +1583,10 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
     }
     freg_offs = offsetof(CPUARMState, vfp.regs[fp_reg * 2]);
 
+    if (!direction) {
+        clear_fpreg(fp_reg);
+    }
+
     if (is_32bit) {
         /* XXX handle is_32bit case when doing scalar->single) */
     }
@@ -1697,6 +1711,10 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
 
         if (rmode & 1) {
             freg_offs += sizeof(float64);
+        }
+
+        if (itof) {
+            clear_fpreg(dest);
         }
 
         switch (type |
@@ -1832,6 +1850,7 @@ static void handle_fpdp1s64(DisasContext *s, uint32_t insn)
         return;
     }
 
+    clear_fpreg(rd);
     tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
 
     tcg_temp_free_ptr(fpst);
@@ -1870,6 +1889,7 @@ static void handle_fpdp1s32(DisasContext *s, uint32_t insn)
         return;
     }
 
+    clear_fpreg(rd);
     tcg_gen_ext32u_i64(tcg_tmp, tcg_res);
     tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs_d);
 
@@ -1919,6 +1939,7 @@ static void handle_fpdp2s64(DisasContext *s, uint32_t insn)
         return;
     }
 
+    clear_fpreg(rd);
     tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
 
     tcg_temp_free_ptr(fpst);
@@ -1970,6 +1991,7 @@ static void handle_fpdp2s32(DisasContext *s, uint32_t insn)
         return;
     }
 
+    clear_fpreg(rd);
     tcg_gen_ext32u_i64(tcg_tmp, tcg_res);
     tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs_d);
 
@@ -2012,6 +2034,7 @@ static void handle_fpdp3s64(DisasContext *s, uint32_t insn)
         return;
     }
 
+    clear_fpreg(rd);
     tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
 
     tcg_temp_free_ptr(fpst);
@@ -2057,6 +2080,7 @@ static void handle_fpdp3s32(DisasContext *s, uint32_t insn)
         return;
     }
 
+    clear_fpreg(rd);
     tcg_gen_ext32u_i64(tcg_tmp, tcg_res);
     tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs_d);
 
