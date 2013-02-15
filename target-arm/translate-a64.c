@@ -363,6 +363,9 @@ static void handle_msr(DisasContext *s, uint32_t insn)
     /* XXX what are these? */
     if (op0 == 3 && op1 == 3 && op2 == 2 && !crm && crn == 13) {
         tcg_gen_st_i64(cpu_reg(dest), cpu_env, offsetof(CPUARMState, sr.tpidr_el0));
+    } else if (op0 == 3 && op1 == 3 && op2 == 0 && crm == 4 && crn == 4) {
+        tcg_gen_st32_i64(cpu_reg(dest), cpu_env,
+            offsetof(CPUARMState, vfp.xregs[ARM_VFP_FPSCR]));
     } else {
         fprintf(stderr, "MSR: %d %d %d %d %d\n", op0, op1, op2, crm, crn);
         unallocated_encoding(s);
@@ -381,6 +384,9 @@ static void handle_mrs(DisasContext *s, uint32_t insn)
     /* XXX what are these? */
     if (op0 == 3 && op1 == 3 && op2 == 2 && !crm && crn == 13) {
         tcg_gen_ld_i64(cpu_reg(dest), cpu_env, offsetof(CPUARMState, sr.tpidr_el0));
+    } else if (op0 == 3 && op1 == 3 && op2 == 0 && crm == 4 && crn == 4) {
+        tcg_gen_ld32u_i64(cpu_reg(dest), cpu_env,
+            offsetof(CPUARMState, vfp.xregs[ARM_VFP_FPSCR]));
     } else {
         fprintf(stderr, "MRS: %d %d %d %d %d\n", op0, op1, op2, crm, crn);
         unallocated_encoding(s);
@@ -2094,6 +2100,66 @@ static void handle_fpdp3s32(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_tmp);
 }
 
+static void handle_v3add(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 5);
+    int size = get_bits(insn, 22, 2);
+    bool is_sub = get_bits(insn, 29, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+
+    switch (size) {
+    case 0:
+        tcg_gen_ld8u_i64(tcg_op1, cpu_env, freg_offs_n);
+        tcg_gen_ld8u_i64(tcg_op2, cpu_env, freg_offs_m);
+        break;
+    case 1:
+        tcg_gen_ld16u_i64(tcg_op1, cpu_env, freg_offs_n);
+        tcg_gen_ld16u_i64(tcg_op2, cpu_env, freg_offs_m);
+        break;
+    case 2:
+        tcg_gen_ld32u_i64(tcg_op1, cpu_env, freg_offs_n);
+        tcg_gen_ld32u_i64(tcg_op2, cpu_env, freg_offs_m);
+        break;
+    case 3:
+        tcg_gen_ld_i64(tcg_op1, cpu_env, freg_offs_n);
+        tcg_gen_ld_i64(tcg_op2, cpu_env, freg_offs_m);
+        break;
+    }
+
+    if (is_sub) {
+        tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_op2);
+    } else {
+        tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
+    }
+    clear_fpreg(rd);
+
+    switch (size) {
+    case 0:
+        tcg_gen_st8_i64(tcg_res, cpu_env, freg_offs_d);
+        break;
+    case 1:
+        tcg_gen_st16_i64(tcg_res, cpu_env, freg_offs_d);
+        break;
+    case 2:
+        tcg_gen_st32_i64(tcg_res, cpu_env, freg_offs_d);
+        break;
+    case 3:
+        tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
+        break;
+    }
+
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_op2);
+    tcg_temp_free_i64(tcg_res);
+}
+
 static void handle_dupg(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
@@ -2102,7 +2168,6 @@ static void handle_dupg(DisasContext *s, uint32_t insn)
     int q = get_bits(insn, 30, 1);
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int size;
-    TCGv_i64 tcg_tmp = tcg_temp_new_i64();
     int i;
 
     for (size = 0; !(imm5 & (1 << size)); size++) {
@@ -2140,8 +2205,48 @@ static void handle_dupg(DisasContext *s, uint32_t insn)
         }
         break;
     }
+}
 
-    tcg_temp_free_i64(tcg_tmp);
+static void handle_umov(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int imm5 = get_bits(insn, 16, 6);
+    int q = get_bits(insn, 30, 1);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int size;
+    int idx;
+
+    for (size = 0; !(imm5 & (1 << size)); size++) {
+        if (size > 3) {
+            unallocated_encoding(s);
+            return;
+        }
+    }
+
+    if ((size == 3) && !q) {
+        /* XXX reserved value */
+        unallocated_encoding(s);
+    }
+
+    switch (size) {
+    case 0:
+        idx = get_bits(imm5, 1, 4) << 0;
+        tcg_gen_ld8u_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
+        break;
+    case 1:
+        idx = get_bits(imm5, 2, 3) << 1;
+        tcg_gen_ld16u_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
+        break;
+    case 2:
+        idx = get_bits(imm5, 3, 2) << 2;
+        tcg_gen_ld32u_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
+        break;
+    case 3:
+        idx = get_bits(imm5, 4, 1) << 3;
+        tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
+        break;
+    }
 }
 
 void disas_a64_insn(CPUARMState *env, DisasContext *s)
@@ -2198,6 +2303,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
             (get_bits(insn, 10, 6) == 0x3)) {
             handle_dupg(s, insn);
+        } else if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
+            (get_bits(insn, 10, 6) == 0xf)) {
+            handle_umov(s, insn);
         } else {
             goto unknown_insn;
         }
@@ -2313,6 +2421,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         } else if (!get_bits(insn, 29, 3) && (get_bits(insn, 22, 2) == 0x1) &&
                    get_bits(insn, 21, 1) && (get_bits(insn, 10, 2) == 0x2)) {
             handle_fpdp2s64(s, insn);
+        } else if ((get_bits(insn, 30, 2) == 0x1) && get_bits(insn, 21, 1) &&
+                   (get_bits(insn, 10, 6) == 0x21)) {
+            handle_v3add(s, insn);
         } else {
             goto unknown_insn;
         }
