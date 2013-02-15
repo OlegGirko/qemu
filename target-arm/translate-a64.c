@@ -132,6 +132,17 @@ static TCGv_i64 cpu_reg_sp(int reg)
     }
 }
 
+static TCGv_ptr get_fpstatus_ptr(void)
+{
+    TCGv_ptr statusptr = tcg_temp_new_ptr();
+    int offset;
+
+    offset = offsetof(CPUARMState, vfp.standard_fp_status);
+    tcg_gen_addi_ptr(statusptr, cpu_env, offset);
+
+    return statusptr;
+}
+
 static int get_mem_index(DisasContext *s)
 {
     /* XXX only user mode for now */
@@ -217,7 +228,7 @@ static void handle_br(DisasContext *s, uint32_t insn)
         tcg_gen_movi_i64(cpu_reg(30), s->pc);
         break;
     case 2: /* RET */
-        source = 30; /* XXX spec says "if absent"? */
+        source = 30;
         break;
     case 3:
         unallocated_encoding(s);
@@ -779,7 +790,7 @@ static void ldst_do_vec(DisasContext *s, int dest, TCGv_i64 tcg_addr_real,
 {
     TCGv_i64 tcg_tmp = tcg_temp_new_i64();
     TCGv_i64 tcg_addr = tcg_temp_new_i64();
-    int freg_offs = offsetof(CPUARMState, fregs[0]) + dest * 2;
+    int freg_offs = offsetof(CPUARMState, vfp.regs[dest * 2]);
 
     /* we don't want to modify the caller's tcg_addr */
     tcg_gen_mov_i64(tcg_addr, tcg_addr_real);
@@ -1527,7 +1538,6 @@ static void handle_dp3s(DisasContext *s, uint32_t insn)
 /* fixed <-> floating conversion */
 static void handle_fpfpconv(DisasContext *s, uint32_t insn)
 {
-#if 0
     int rd = get_reg(insn);
     int rn = get_bits(insn, 5, 5);
     int scale = get_bits(insn, 10, 6);
@@ -1536,9 +1546,112 @@ static void handle_fpfpconv(DisasContext *s, uint32_t insn)
     int type = get_bits(insn, 22, 2);
     bool is_s = get_bits(insn, 29, 1);
     bool is_32bit = !get_bits(insn, 31, 1);
-#endif
+    bool is_double = get_bits(type, 0, 1);
+    bool is_signed = !get_bits(opcode, 0, 1);
+    bool direction;
+    int freg_offs;
+    int fp_reg;
+    TCGv_i64 tcg_int;
+    TCGv_i64 tcg_single;
+    TCGv_i64 tcg_double;
+    TCGv_i64 tcg_fpstatus = get_fpstatus_ptr();
+    TCGv_i32 tcg_shift = tcg_const_i32(scale);
+    TCGv_i64 tcg_tmp;
 
-    unallocated_encoding(s);
+    if (is_s || (type > 1) || (opcode > 1)) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    switch (rmode) {
+    case 0x1: /* [S|U]CVTF (scalar->float) */
+        direction = 0;
+        fp_reg = rd;
+        tcg_int = cpu_reg(rn);
+        break;
+    case 0x3: /* FCVTZ[S|U] (float->scalar) */
+        direction = 1;
+        fp_reg = rn;
+        tcg_int = cpu_reg(rd);
+        break;
+    default:
+        unallocated_encoding(s);
+        return;
+    }
+
+    freg_offs = offsetof(CPUARMState, vfp.regs[fp_reg * 2]);
+
+    /* XXX handle is_32bit case when doing scalar->single) */
+
+    switch ((direction ? 0x10 : 0)|
+            (is_double ? 0x1 : 0) |
+            (is_signed ? 0x2 : 0)) {
+    case 0x0: /* unsigned scalar->single */
+        tcg_single = tcg_temp_new_i32();
+        tcg_tmp = tcg_temp_new_i64();
+        gen_helper_vfp_uqtos(tcg_single, tcg_int, tcg_shift, tcg_fpstatus);
+        tcg_gen_extu_i32_i64(tcg_tmp, tcg_single);
+        tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs);
+        tcg_temp_free_i32(tcg_single);
+        tcg_temp_free_i64(tcg_tmp);
+        break;
+    case 0x1: /* unsigned scalar->double */
+        tcg_double = tcg_temp_new_i64();
+        gen_helper_vfp_uqtod(tcg_double, tcg_int, tcg_shift, tcg_fpstatus);
+        tcg_gen_st_i64(tcg_double, cpu_env, freg_offs);
+        tcg_temp_free_i64(tcg_double);
+        break;
+    case 0x2: /* signed scalar->single */
+        tcg_single = tcg_temp_new_i32();
+        tcg_tmp = tcg_temp_new_i64();
+        gen_helper_vfp_sqtos(tcg_single, tcg_int, tcg_shift, tcg_fpstatus);
+        tcg_gen_extu_i32_i64(tcg_tmp, tcg_single);
+        tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs);
+        tcg_temp_free_i32(tcg_single);
+        tcg_temp_free_i64(tcg_tmp);
+        break;
+    case 0x3: /* signed scalar->double */
+        tcg_double = tcg_temp_new_i64();
+        gen_helper_vfp_sqtod(tcg_double, tcg_int, tcg_shift, tcg_fpstatus);
+        tcg_gen_st_i64(tcg_double, cpu_env, freg_offs);
+        tcg_temp_free_i64(tcg_double);
+        break;
+    case 0x10: /* unsigned single->scalar */
+        tcg_single = tcg_temp_new_i32();
+        tcg_tmp = tcg_temp_new_i64();
+        tcg_gen_ld32u_i64(tcg_tmp, cpu_env, freg_offs);
+        tcg_gen_trunc_i64_i32(tcg_single, tcg_tmp);
+        gen_helper_vfp_touqs(tcg_int, tcg_single, tcg_shift, tcg_fpstatus);
+        tcg_temp_free_i32(tcg_single);
+        tcg_temp_free_i64(tcg_tmp);
+        break;
+    case 0x11: /* unsigned single->double */
+        tcg_double = tcg_temp_new_i64();
+        tcg_gen_ld_i64(tcg_double, cpu_env, freg_offs);
+        gen_helper_vfp_touqd(tcg_int, tcg_double, tcg_shift, tcg_fpstatus);
+        tcg_temp_free_i64(tcg_double);
+        break;
+    case 0x12: /* signed single->scalar */
+        tcg_single = tcg_temp_new_i32();
+        tcg_tmp = tcg_temp_new_i64();
+        tcg_gen_ld32u_i64(tcg_tmp, cpu_env, freg_offs);
+        tcg_gen_trunc_i64_i32(tcg_single, tcg_tmp);
+        gen_helper_vfp_tosqs(tcg_int, tcg_single, tcg_shift, tcg_fpstatus);
+        tcg_temp_free_i32(tcg_single);
+        tcg_temp_free_i64(tcg_tmp);
+        break;
+    case 0x13: /* signed single->double */
+        tcg_double = tcg_temp_new_i64();
+        tcg_gen_ld_i64(tcg_double, cpu_env, freg_offs);
+        gen_helper_vfp_tosqd(tcg_int, tcg_double, tcg_shift, tcg_fpstatus);
+        tcg_temp_free_i64(tcg_double);
+        break;
+    default:
+        unallocated_encoding(s);
+    }
+
+    tcg_temp_free_i64(tcg_fpstatus);
+    tcg_temp_free_i32(tcg_shift);
 }
 
 /* floating <-> integer conversion */
@@ -1556,10 +1669,10 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
         /* FMOV */
         bool itof = opcode & 1;
         int dest = itof ? rd : rn;
-        int freg_offs = offsetof(CPUARMState, fregs[0]) + dest * 2;
+        int freg_offs = offsetof(CPUARMState, vfp.regs[dest * 2]);
 
         if (rmode & 1) {
-            /* XXX upper Q part */
+            freg_offs += sizeof(float64);
         }
 
         switch (type |
@@ -1746,10 +1859,6 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         } else if (get_bits(insn, 21, 1) && !get_bits(insn, 30, 1) &&
                    !get_bits(insn, 10, 6)) {
             handle_fpintconv(s, insn);
-#if 0
-        } else if (!get_bits(insn, 21, 1) && !get_bits(insn, 29, 2)) {
-            handle_scvtf(s, insn);
-#endif
         } else {
             goto unknown_insn;
         }
