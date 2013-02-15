@@ -5021,6 +5021,47 @@ static int open_self_stat(void *cpu_env, int fd)
     return 0;
 }
 
+static int open_meminfo(void *cpu_env, int fd)
+{
+    dprintf(fd,
+"MemTotal:        4049236 kB\n"
+"MemFree:         2639028 kB\n"
+"Buffers:           37112 kB\n"
+"Cached:          1291960 kB\n"
+"SwapCached:            0 kB\n"
+"Active:            50548 kB\n"
+"Inactive:        1283984 kB\n"
+"Active(anon):       5508 kB\n"
+"Inactive(anon):      200 kB\n"
+"Active(file):      45040 kB\n"
+"Inactive(file):  1283784 kB\n"
+"Unevictable:           0 kB\n"
+"Mlocked:               0 kB\n"
+"SwapTotal:             0 kB\n"
+"SwapFree:              0 kB\n"
+"Dirty:                 0 kB\n"
+"Writeback:             0 kB\n"
+"AnonPages:          5480 kB\n"
+"Mapped:             4260 kB\n"
+"Shmem:               248 kB\n"
+"Slab:              70456 kB\n"
+"SReclaimable:      65932 kB\n"
+"SUnreclaim:         4524 kB\n"
+"KernelStack:         464 kB\n"
+"PageTables:          388 kB\n"
+"NFS_Unstable:          0 kB\n"
+"Bounce:                0 kB\n"
+"WritebackTmp:          0 kB\n"
+"CommitLimit:     2024616 kB\n"
+"Committed_AS:      28580 kB\n"
+"VmallocTotal:   251658176 kB\n"
+"VmallocUsed:          72 kB\n"
+"VmallocChunk:   251658064 kB\n"
+);
+
+    return 0;
+}
+
 static int open_cpuinfo(void *cpu_env, int fd)
 {
     dprintf(fd,
@@ -5105,6 +5146,7 @@ static int do_open(void *cpu_env, const char *pathname, int flags, mode_t mode)
         { "stat", open_self_stat },
         { "auxv", open_self_auxv },
         { "/proc/cpuinfo", open_cpuinfo },
+        { "/proc/meminfo", open_meminfo },
         { NULL, NULL }
     };
 
