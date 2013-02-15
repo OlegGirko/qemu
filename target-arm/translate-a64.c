@@ -1729,8 +1729,8 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
         case 0x2:
             tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
             break;
-        case 0x4:
-            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs + sizeof(float64));
+        case 0x6:
+            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
             break;
         case 0x8:
             tcg_gen_st32_i64(cpu_reg(rn), cpu_env, freg_offs + sizeof(float32));
@@ -1741,9 +1741,11 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
         case 0xa:
             tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
             break;
-        case 0xc:
-            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs + sizeof(float64));
+        case 0xe:
+            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
             break;
+        default:
+            unallocated_encoding(s);
         }
 
         if (is_32bit && !itof) {
