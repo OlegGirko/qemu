@@ -2094,6 +2094,56 @@ static void handle_fpdp3s32(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_tmp);
 }
 
+static void handle_dupg(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int imm5 = get_bits(insn, 16, 6);
+    int q = get_bits(insn, 30, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int size;
+    TCGv_i64 tcg_tmp = tcg_temp_new_i64();
+    int i;
+
+    for (size = 0; !(imm5 & (1 << size)); size++) {
+        if (size > 3) {
+            unallocated_encoding(s);
+            return;
+        }
+    }
+
+    if ((size == 3) && !q) {
+        /* XXX reserved value */
+        unallocated_encoding(s);
+    }
+
+    clear_fpreg(rd);
+    switch (size) {
+    case 0:
+        for (i = 0; i < (q ? 16 : 8); i++) {
+            tcg_gen_st8_i64(cpu_reg(rn), cpu_env, freg_offs_d + i);
+        }
+        break;
+    case 1:
+        for (i = 0; i < (q ? 16 : 8); i+=2) {
+            tcg_gen_st16_i64(cpu_reg(rn), cpu_env, freg_offs_d + i);
+        }
+        break;
+    case 2:
+        for (i = 0; i < (q ? 16 : 8); i+=4) {
+            tcg_gen_st32_i64(cpu_reg(rn), cpu_env, freg_offs_d + i);
+        }
+        break;
+    case 3:
+        for (i = 0; i < (q ? 16 : 8); i+=8) {
+            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs_d + i);
+        }
+        break;
+    }
+
+    tcg_temp_free_i64(tcg_tmp);
+}
+
 void disas_a64_insn(CPUARMState *env, DisasContext *s)
 {
     uint32_t insn;
@@ -2143,6 +2193,14 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
     case 0x0D:
         reserved(s, insn, 29, 1, 1);
         handle_stp(s, insn);
+        break;
+    case 0x0e:
+        if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
+            (get_bits(insn, 10, 6) == 0x3)) {
+            handle_dupg(s, insn);
+        } else {
+            goto unknown_insn;
+        }
         break;
     case 0x10:
         handle_adr(s, insn);
