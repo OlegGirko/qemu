@@ -5021,50 +5021,23 @@ static int open_self_stat(void *cpu_env, int fd)
     return 0;
 }
 
-static int open_meminfo(void *cpu_env, int fd)
-{
-    dprintf(fd,
-"MemTotal:        4049236 kB\n"
-"MemFree:         2639028 kB\n"
-"Buffers:           37112 kB\n"
-"Cached:          1291960 kB\n"
-"SwapCached:            0 kB\n"
-"Active:            50548 kB\n"
-"Inactive:        1283984 kB\n"
-"Active(anon):       5508 kB\n"
-"Inactive(anon):      200 kB\n"
-"Active(file):      45040 kB\n"
-"Inactive(file):  1283784 kB\n"
-"Unevictable:           0 kB\n"
-"Mlocked:               0 kB\n"
-"SwapTotal:             0 kB\n"
-"SwapFree:              0 kB\n"
-"Dirty:                 0 kB\n"
-"Writeback:             0 kB\n"
-"AnonPages:          5480 kB\n"
-"Mapped:             4260 kB\n"
-"Shmem:               248 kB\n"
-"Slab:              70456 kB\n"
-"SReclaimable:      65932 kB\n"
-"SUnreclaim:         4524 kB\n"
-"KernelStack:         464 kB\n"
-"PageTables:          388 kB\n"
-"NFS_Unstable:          0 kB\n"
-"Bounce:                0 kB\n"
-"WritebackTmp:          0 kB\n"
-"CommitLimit:     2024616 kB\n"
-"Committed_AS:      28580 kB\n"
-"VmallocTotal:   251658176 kB\n"
-"VmallocUsed:          72 kB\n"
-"VmallocChunk:   251658064 kB\n"
-);
-
-    return 0;
-}
-
 static int open_cpuinfo(void *cpu_env, int fd)
 {
     dprintf(fd,
+#ifdef TARGET_ARM64
+"Processor	: AArch64 Processor rev 0 (aarch64)\n"
+"processor	: 0\n"
+"BogoMIPS	: 200.00\n"
+"\n"
+"Features	: fp asimd \n"
+"CPU implementer	: 0x41\n"
+"CPU architecture: AArch64\n"
+"CPU variant	: 0x0\n"
+"CPU part	: 0xd00\n"
+"CPU revision	: 0\n"
+"\n"
+"Hardware	: V2P-AARCH64\n"
+#else
 "Processor       : ARMv7 Processor rev 5 (v7l)\n"
 "BogoMIPS        : 799.53\n"
 "Features        : swp half thumb fastmult vfp edsp thumbee neon vfpv3\n"
@@ -5076,7 +5049,9 @@ static int open_cpuinfo(void *cpu_env, int fd)
 "\n"
 "Hardware        : Genesi Efika MX (Smarttop)\n"
 "Revision        : 51030\n"
-"Serial          : 0000000000000000\n");
+"Serial          : 0000000000000000\n"
+#endif
+);
 
     return 0;
 }
@@ -5084,7 +5059,7 @@ static int open_cpuinfo(void *cpu_env, int fd)
 static int open_self_auxv(void *cpu_env, int fd)
 {
     TaskState *ts = ((CPUArchState *)cpu_env)->opaque;
-    abi_ulong auxv = ts->info->saved_auxv;
+    abi_ulong auxv = ts->info->saved_auxv; // - ts->info->auxv_len;
     abi_ulong len = ts->info->auxv_len;
     char *ptr;
 
@@ -5146,7 +5121,6 @@ static int do_open(void *cpu_env, const char *pathname, int flags, mode_t mode)
         { "stat", open_self_stat },
         { "auxv", open_self_auxv },
         { "/proc/cpuinfo", open_cpuinfo },
-        { "/proc/meminfo", open_meminfo },
         { NULL, NULL }
     };
 
@@ -5187,6 +5161,63 @@ static int do_open(void *cpu_env, const char *pathname, int flags, mode_t mode)
     }
 
     return get_errno(open(path(pathname), flags, mode));
+}
+
+/* resolve_dirfd_path - get the path relative to a dirfd
+ *
+ * return value:
+ * -1 - error!
+ *  0 - path is in @resolved_path
+ *  1 - path is in @path (no resolution necessary)
+ *  2 - errno issues -- ignore this path
+ */
+static int resolve_dirfd_path(int dirfd, const char *path, char *resolved_path,
+                              size_t resolved_path_len)
+{
+    size_t at_len;
+    ssize_t ret;
+
+    /* The *at style functions have the following semantics:
+     *    - dirfd = AT_FDCWD: same as non-at func: file is based on CWD
+     *    - file is absolute: dirfd is ignored
+     *    - otherwise: file is relative to dirfd
+     * Since maintaining fd state based on open's is real messy, we'll
+     * just rely on the kernel doing it for us with /proc/<pid>/fd/ ...
+     */
+    if (dirfd == AT_FDCWD || (path && path[0] == '/')) {
+        return 1;
+    }
+
+    at_len = resolved_path_len - 1 - 1 - (path ? strlen(path) : 0);
+    sprintf(resolved_path, "/proc/self/fd/%i", dirfd);
+    ret = readlink(resolved_path, resolved_path, at_len);
+    if (ret < 0) {
+        return ret;
+    }
+    resolved_path[ret] = '/';
+    resolved_path[ret + 1] = '\0';
+    if (path) {
+        strcat(resolved_path, path);
+    }
+
+    return 0;
+}
+
+
+static int do_openat(void *cpu_env, int dirfd, const char *path,
+                     int flags, mode_t mode)
+{
+    char real_path[1024];
+    int r;
+
+    r = resolve_dirfd_path(dirfd, path, real_path, sizeof(real_path));
+    if (r < 0) {
+        return r;
+    } else if (r == 1) {
+        return do_open(cpu_env, path, flags, mode);
+    } else {
+        return do_open(cpu_env, real_path, flags, mode);
+    }
 }
 
 int syscall_restartable(int syscall_nr)
@@ -5366,16 +5397,17 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                                 arg3));
         unlock_user(p, arg1, 0);
         break;
-#if defined(TARGET_NR_openat) && defined(__NR_openat)
-    case TARGET_NR_openat:
+#if defined(TARGET_NR_openat)
+    case TARGET_NR_openat: {
         if (!(p = lock_user_string(arg2)))
             goto efault;
-        ret = get_errno(sys_openat(arg1,
+        ret = get_errno(do_openat(cpu_env, arg1,
                                    path(p),
                                    target_to_host_bitmask(arg3, fcntl_flags_tbl),
                                    arg4));
         unlock_user(p, arg2, 0);
         break;
+    }
 #endif
     case TARGET_NR_close:
         ret = get_errno(close(arg1));
