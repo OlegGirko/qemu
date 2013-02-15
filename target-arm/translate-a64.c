@@ -421,46 +421,43 @@ static void handle_movi(DisasContext *s, uint32_t insn)
     }
 }
 
+static uint64_t replicate(uint64_t mask, int esize)
+{
+    int i;
+    uint64_t out_mask = 0;
+    for (i = 0; (i * esize) < 64; i++) {
+        out_mask = out_mask | (mask << (i * esize));
+    }
+    return out_mask;
+}
+
+static uint64_t bitmask(int len)
+{
+    if (len == 64) {
+        return -1;
+    }
+    return (1ULL << len) - 1;
+}
+
 #define MASK_TMASK 0
 #define MASK_WMASK 1
 static uint64_t decode_mask(int immn, int imms, int immr, int type)
 {
     uint64_t mask;
-    int bitsize = immn ? 64 : 32;
+    int len = 31 - clz32((immn << 6) | (~imms & 0x3f));
+    int esize = 1 << len;
+    int levels = (esize - 1) & 0x3f;
+    int s = imms & levels;
+    int r = immr & levels;
+    int d = (s - r) & 0x3f;
 
-    if (!immn && imms == 60 && immr == 1) {
-        /* XXX find the logic behind these. */
-        return 0xaaaaaaaaaaaaaaaaULL;
-    }
-
-    if (!immn && imms == 48 && immr == 1) {
-        /* XXX find the logic behind these. */
-        return 0x8080808080808080ULL;
-    }
-
-    if (!immn && imms == 54 && immr == 7) {
-        /* XXX find the logic behind these. */
-        return 0xfefefefefefefefeULL;
-    }
-
-    if (!immn && imms == 57 && immr == 2) {
-        /* XXX find the logic behind these. */
-        return 0xcccccccccccccccc;
-    }
-
-    if (imms == 0x3f) {
-        mask = ~0ULL;
+    if (type == MASK_WMASK) {
+        mask = bitmask(s + 1);
+        mask = ((mask >> r) | (mask << (esize - r)));
+        mask &= bitmask(esize);
+        mask = replicate(mask, esize);
     } else {
-        mask = ((1ULL << (imms + 1)) - 1);
-    }
-    mask = (mask >> immr) | (mask << (bitsize - immr));
-
-    if (type == MASK_TMASK) {
-        mask = ~mask;
-    }
-
-    if (!immn) {
-        mask = (uint32_t)mask;
+        mask = bitmask(d + 1);
     }
 
     return mask;
@@ -490,6 +487,7 @@ static void handle_orri(DisasContext *s, uint32_t insn)
     TCGv_i64 tcg_dst;
     TCGv_i64 tcg_op2;
     bool setflags = false;
+    uint64_t wmask;
 
     if (is_32bit && is_n) {
         /* reserved */
@@ -506,7 +504,11 @@ static void handle_orri(DisasContext *s, uint32_t insn)
         tcg_dst = cpu_reg_sp(dest);
     }
 
-    tcg_op2 = tcg_const_i64(decode_wmask(is_n, imms, immr));
+    wmask = decode_wmask(is_n, imms, immr);
+    if (is_32bit) {
+        wmask = (uint32_t)wmask;
+    }
+    tcg_op2 = tcg_const_i64(wmask);
 
     switch (opc) {
     case 0x3:
@@ -1744,6 +1746,10 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         } else if (get_bits(insn, 21, 1) && !get_bits(insn, 30, 1) &&
                    !get_bits(insn, 10, 6)) {
             handle_fpintconv(s, insn);
+#if 0
+        } else if (!get_bits(insn, 21, 1) && !get_bits(insn, 29, 2)) {
+            handle_scvtf(s, insn);
+#endif
         } else {
             goto unknown_insn;
         }
