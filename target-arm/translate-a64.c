@@ -91,6 +91,15 @@ void cpu_dump_state_a64(CPUARMState *env, FILE *f, fprintf_function cpu_fprintf,
         env->pstate & PSTATE_C ? 'c' : '.',
         env->pstate & PSTATE_V ? 'v' : '.');
     cpu_fprintf(f, "\n");
+
+    if (1) { //flags & CPU_DUMP_FPU) {
+        int numvfpregs = 32;
+        for (i = 0; i < numvfpregs; i++) {
+            uint64_t v = float64_val(env->vfp.regs[i * 2]);
+            cpu_fprintf(f, "d%02d=%016" PRIx64 "\n", i, v);
+        }
+        cpu_fprintf(f, "FPSCR: %08x\n", (int)env->vfp.xregs[ARM_VFP_FPSCR]);
+    }
 }
 
 static int get_bits(uint32_t inst, int start, int len)
@@ -1772,7 +1781,7 @@ static void handle_fcmp(DisasContext *s, uint32_t insn)
     int opc = get_bits(insn, 3, 2);
     int rn = get_bits(insn, 5, 5);
     int rm = get_bits(insn, 16, 5);
-    bool is_32bit = get_bits(insn, 22, 1);
+    bool is_32bit = !get_bits(insn, 22, 1);
     bool is_cmp_with_zero = get_bits(opc, 0, 1);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
     int freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
