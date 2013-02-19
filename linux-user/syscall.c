@@ -5212,7 +5212,8 @@ static int do_openat(void *cpu_env, int dirfd, const char *path,
 
     r = resolve_dirfd_path(dirfd, path, real_path, sizeof(real_path));
     if (r < 0) {
-        return r;
+        /* /proc might not be mounted. Let the host handle this. */
+        return sys_openat(dirfd, path, flags, mode);
     } else if (r == 1) {
         return do_open(cpu_env, path, flags, mode);
     } else {

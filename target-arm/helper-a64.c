@@ -260,3 +260,8 @@ float64 HELPER(rintd)(float64 x, void *fp_status)
     return float64_round_to_int(x, fp_status);
 }
 
+float32 HELPER(rints)(float32 x, void *fp_status)
+{
+    return float32_round_to_int(x, fp_status);
+}
+

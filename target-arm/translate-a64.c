@@ -1880,6 +1880,13 @@ static void handle_fpdp1s64(DisasContext *s, uint32_t insn)
     case 0x3: /* FSQRT */
         gen_helper_vfp_sqrtd(tcg_res, tcg_op, cpu_env);
         break;
+    case 0x4: /* FCVT (double to single) */
+        gen_helper_vfp_fcvtsd(tcg_res, tcg_op, cpu_env);
+        break;
+#if 0 /* XXX */
+    case 0x7: /* FCVT (double to half) */
+        break;
+#endif
     case 0x8: /* FRINTN XXX add rounding mode */
     case 0x9: /* FRINTP */
     case 0xa: /* FRINTM */
@@ -1914,6 +1921,7 @@ static void handle_fpdp1s32(DisasContext *s, uint32_t insn)
     TCGv_i32 tcg_op = tcg_temp_new_i32();
     TCGv_i32 tcg_res = tcg_temp_new_i32();
     TCGv_ptr fpst = get_fpstatus_ptr();
+    bool skip_write = false;
 
     tcg_gen_ld_i64(tcg_tmp, cpu_env, freg_offs_n);
     tcg_gen_trunc_i64_i32(tcg_op, tcg_tmp);
@@ -1928,14 +1936,38 @@ static void handle_fpdp1s32(DisasContext *s, uint32_t insn)
     case 0x2: /* FNEG */
         gen_helper_vfp_negs(tcg_res, tcg_op);
         break;
+    case 0x3: /* FSQRT */
+        gen_helper_vfp_sqrts(tcg_res, tcg_op, cpu_env);
+        break;
+    case 0x5: /* FCVT (single to double) */
+        skip_write = true;
+        gen_helper_vfp_fcvtds(tcg_tmp, tcg_op, cpu_env);
+        clear_fpreg(rd);
+        tcg_gen_st_i64(tcg_tmp, cpu_env, freg_offs_d);
+        break;
+#if 0 /* XXX */
+    case 0x7: /* FCVT (single to half) */
+        break;
+#endif
+    case 0x8: /* FRINTN XXX add rounding mode */
+    case 0x9: /* FRINTP */
+    case 0xa: /* FRINTM */
+    case 0xb: /* FRINTZ */
+    case 0xc: /* FRINTA */
+    case 0xe: /* FRINTX */
+    case 0xf: /* FRINTI */
+        gen_helper_rints(tcg_res, tcg_op, fpst);
+        break;
     default:
         unallocated_encoding(s);
         return;
     }
 
-    clear_fpreg(rd);
-    tcg_gen_ext32u_i64(tcg_tmp, tcg_res);
-    tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs_d);
+    if (!skip_write) {
+        clear_fpreg(rd);
+        tcg_gen_ext32u_i64(tcg_tmp, tcg_res);
+        tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs_d);
+    }
 
     tcg_temp_free_ptr(fpst);
     tcg_temp_free_i32(tcg_op);
