@@ -41,6 +41,7 @@ these four paragraphs for those parts of this code that are retained.
 #include "config.h"
 
 #include "fpu/softfloat.h"
+#include "assert.h"
 
 /*----------------------------------------------------------------------------
 | Primitive arithmetic functions, including multi-word arithmetic, and
@@ -6552,11 +6553,21 @@ uint64_t float64_to_uint64_round_to_zero (float64 a STATUS_PARAM)
 {
     int64_t v;
 
+    v = float64_val(a);
+    if (v > int64_to_float64(INT64_MIN STATUS_VAR)) {
+        /* XXX */
+        assert(0);
+    }
+    return float64_to_int64_round_to_zero(a STATUS_VAR);
+#if 0
+    int64_t v;
+
     v = float64_val(int64_to_float64(INT64_MIN STATUS_VAR));
     v += float64_val(a);
     v = float64_to_int64_round_to_zero(make_float64(v) STATUS_VAR);
 
     return v - INT64_MIN;
+#endif
 }
 
 #define COMPARE(s, nan_exp)                                                  \

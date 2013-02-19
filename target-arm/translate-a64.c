@@ -1225,10 +1225,19 @@ static void handle_rev(DisasContext *s, uint32_t insn)
     int rn = get_bits(insn, 5, 5);
     int opc = get_bits(insn, 10, 2);
     bool is_32bit = !get_bits(insn, 31, 1);
+    TCGv_i32 tcg_tmp;
 
     switch (opc) {
     case 0x0: /* RBIT */
-        gen_helper_rbit64(cpu_reg(rd), cpu_reg(rn));
+        if (is_32bit) {
+            tcg_tmp = tcg_temp_new_i32();
+            tcg_gen_trunc_i64_i32(tcg_tmp, cpu_reg(rn));
+            gen_helper_rbit(tcg_tmp, tcg_tmp);
+            tcg_gen_extu_i32_i64(cpu_reg(rd), tcg_tmp);
+            tcg_temp_free_i32(tcg_tmp);
+        } else {
+            gen_helper_rbit64(cpu_reg(rd), cpu_reg(rn));
+        }
         break;
     case 0x1: /* REV16 */
         tcg_gen_bswap16_i64(cpu_reg(rd), cpu_reg(rn));
@@ -1603,7 +1612,13 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
     }
 
     if (is_32bit) {
-        /* XXX handle is_32bit case when doing scalar->single) */
+        tcg_tmp = tcg_temp_new_i64();
+        if (is_signed) {
+            tcg_gen_ext32s_i64(tcg_tmp, tcg_int);
+        } else {
+            tcg_gen_ext32u_i64(tcg_tmp, tcg_int);
+        }
+        tcg_int = tcg_tmp;
     }
     /* XXX handle rmode */
 
@@ -1861,6 +1876,18 @@ static void handle_fpdp1s64(DisasContext *s, uint32_t insn)
         break;
     case 0x2: /* FNEG */
         gen_helper_vfp_negd(tcg_res, tcg_op);
+        break;
+    case 0x3: /* FSQRT */
+        gen_helper_vfp_sqrtd(tcg_res, tcg_op, cpu_env);
+        break;
+    case 0x8: /* FRINTN XXX add rounding mode */
+    case 0x9: /* FRINTP */
+    case 0xa: /* FRINTM */
+    case 0xb: /* FRINTZ */
+    case 0xc: /* FRINTA */
+    case 0xe: /* FRINTX */
+    case 0xf: /* FRINTI */
+        gen_helper_rintd(tcg_res, tcg_op, fpst);
         break;
     default:
         unallocated_encoding(s);

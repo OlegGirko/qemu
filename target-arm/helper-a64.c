@@ -255,3 +255,8 @@ uint64_t HELPER(clz64)(uint64_t x)
     return clz64(x);
 }
 
+float64 HELPER(rintd)(float64 x, void *fp_status)
+{
+    return float64_round_to_int(x, fp_status);
+}
+

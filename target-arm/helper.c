@@ -3415,12 +3415,14 @@ uint##isz##_t HELPER(vfp_to##name##p)(float##fsz x, uint32_t shift, \
 { \
     float_status *fpst = fpstp; \
     float##fsz tmp; \
+    uint##isz##_t r; \
     if (float##fsz##_is_any_nan(x)) { \
         float_raise(float_flag_invalid, fpst); \
         return 0; \
     } \
     tmp = float##fsz##_scalbn(x, shift, fpst); \
-    return float##fsz##_to_##itype##_round_to_zero(tmp, fpst); \
+    r = float##fsz##_to_##itype##_round_to_zero(tmp, fpst); \
+    return r; \
 }
 
 VFP_CONV_FIX(sh, d, 64, 64, int16, )
