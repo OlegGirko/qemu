@@ -1611,7 +1611,7 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
         clear_fpreg(fp_reg);
     }
 
-    if (is_32bit) {
+    if (is_32bit && !direction) {
         tcg_tmp = tcg_temp_new_i64();
         if (is_signed) {
             tcg_gen_ext32s_i64(tcg_tmp, tcg_int);
