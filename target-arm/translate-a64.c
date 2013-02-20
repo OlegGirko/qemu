@@ -96,6 +96,7 @@ void cpu_dump_state_a64(CPUARMState *env, FILE *f, fprintf_function cpu_fprintf,
         int numvfpregs = 32;
         for (i = 0; i < numvfpregs; i++) {
             uint64_t v = float64_val(env->vfp.regs[i * 2]);
+            if (!v) continue;
             cpu_fprintf(f, "d%02d=%016" PRIx64 "\n", i, v);
         }
         cpu_fprintf(f, "FPSCR: %08x\n", (int)env->vfp.xregs[ARM_VFP_FPSCR]);
@@ -640,7 +641,7 @@ static void handle_orr(DisasContext *s, uint32_t insn)
         return;
     }
 
-    tcg_op2 = get_shifti(rm, shift_type, shift_amount);
+    tcg_op2 = get_shifti(rm, shift_type, shift_amount & (is_32bit ? 31 : 63));
     if (is_n) {
         tcg_gen_not_i64(tcg_op2, tcg_op2);
     }
@@ -1751,27 +1752,17 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
                 ((rmode & 1) ? 0x4 : 0) |
                 (itof ? 0x8 : 0)) {
         case 0x0:
-            tcg_gen_ld32u_i64(cpu_reg(rd), cpu_env, freg_offs + sizeof(float32));
+            tcg_gen_ld32u_i64(cpu_reg(rd), cpu_env, freg_offs);
             break;
         case 0x1:
+        case 0x2 | 0x4:
             tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
             break;
-        case 0x2:
-            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
+        case 0x8 | 0x0:
+            tcg_gen_st32_i64(cpu_reg(rn), cpu_env, freg_offs);
             break;
-        case 0x6:
-            tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs);
-            break;
-        case 0x8:
-            tcg_gen_st32_i64(cpu_reg(rn), cpu_env, freg_offs + sizeof(float32));
-            break;
-        case 0x9:
-            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
-            break;
-        case 0xa:
-            tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
-            break;
-        case 0xe:
+        case 0x8 | 0x1:
+        case 0x8 | 0x2 | 0x4:
             tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs);
             break;
         default:
