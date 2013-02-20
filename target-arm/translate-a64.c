@@ -1699,6 +1699,10 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
         unallocated_encoding(s);
     }
 
+    if (is_32bit && direction) {
+        tcg_gen_ext32u_i64(tcg_int, tcg_int);
+    }
+
     tcg_temp_free_i64(tcg_fpstatus);
     tcg_temp_free_i32(tcg_shift);
 }
