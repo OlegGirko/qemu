@@ -77,7 +77,8 @@ uint32_t HELPER(pstate_sub)(uint32_t pstate, uint64_t a1, uint64_t a2, uint64_t 
         pstate |= PSTATE_C;
     }
 
-    if ((s1 > 0 && s2 < 0 && sr < 0) || (s1 < 0 && s2 > 0 && sr > 0)) {
+    /* XXX check if this is the only special case */
+    if ((!a1 && a2 == 0x8000000000000000ULL) || (s1 > 0 && s2 < 0 && sr < 0) || (s1 < 0 && s2 > 0 && sr > 0)) {
         pstate |= PSTATE_V;
     }
 
@@ -101,7 +102,7 @@ uint32_t HELPER(pstate_sub32)(uint32_t pstate, uint64_t x1, uint64_t x2, uint64_
         pstate |= PSTATE_C;
     }
 
-    if ((s1 > 0 && s2 < 0 && sr < 0) || (s1 < 0 && s2 > 0 && sr > 0)) {
+    if ((!a1 && a2 == 0x80000000ULL) || (s1 > 0 && s2 < 0 && sr < 0) || (s1 < 0 && s2 > 0 && sr > 0)) {
         pstate |= PSTATE_V;
     }
 
