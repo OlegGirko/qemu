@@ -566,7 +566,8 @@ static void handle_orri(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_op2);
 }
 
-static TCGv_i64 get_shift(int reg, int shift_type, TCGv_i64 tcg_shift)
+static TCGv_i64 get_shift(int reg, int shift_type, TCGv_i64 tcg_shift,
+                          int is_32bit)
 {
     TCGv_i64 r;
 
@@ -581,7 +582,14 @@ static TCGv_i64 get_shift(int reg, int shift_type, TCGv_i64 tcg_shift)
         tcg_gen_shr_i64(r, cpu_reg(reg), tcg_shift);
         break;
     case 2: /* ASR */
-        tcg_gen_sar_i64(r, cpu_reg(reg), tcg_shift);
+        if (is_32bit) {
+            TCGv_i64 tcg_tmp = tcg_temp_new_i64();
+            tcg_gen_ext32s_i64(tcg_tmp, cpu_reg(reg));
+            tcg_gen_sar_i64(r, tcg_tmp, tcg_shift);
+            tcg_temp_free_i64(tcg_tmp);
+        } else {
+            tcg_gen_sar_i64(r, cpu_reg(reg), tcg_shift);
+        }
         break;
     case 3:
         tcg_gen_rotr_i64(r, cpu_reg(reg), tcg_shift);
@@ -591,7 +599,7 @@ static TCGv_i64 get_shift(int reg, int shift_type, TCGv_i64 tcg_shift)
     return r;
 }
 
-static TCGv_i64 get_shifti(int reg, int shift_type, int shift)
+static TCGv_i64 get_shifti(int reg, int shift_type, int shift, int is_32bit)
 {
     TCGv_i64 tcg_shift;
     TCGv_i64 r;
@@ -603,7 +611,7 @@ static TCGv_i64 get_shifti(int reg, int shift_type, int shift)
     }
 
     tcg_shift = tcg_const_i64(shift);
-    r = get_shift(reg, shift_type, tcg_shift);
+    r = get_shift(reg, shift_type, tcg_shift, is_32bit);
     tcg_temp_free_i64(tcg_shift);
 
     return r;
@@ -641,7 +649,8 @@ static void handle_orr(DisasContext *s, uint32_t insn)
         return;
     }
 
-    tcg_op2 = get_shifti(rm, shift_type, shift_amount & (is_32bit ? 31 : 63));
+    tcg_op2 = get_shifti(rm, shift_type, shift_amount & (is_32bit ? 31 : 63),
+                         is_32bit);
     if (is_n) {
         tcg_gen_not_i64(tcg_op2, tcg_op2);
     }
@@ -781,7 +790,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
         tcg_op2 = tcg_temp_new_i64();
         reg_extend(tcg_op2, shift_amount >> 3, shift_amount & 0x7, rm);
     } else {
-        tcg_op2 = get_shifti(rm, shift_type, shift_amount);
+        tcg_op2 = get_shifti(rm, shift_type, shift_amount, is_32bit);
     }
 
     if (is_32bit) {
@@ -1214,7 +1223,7 @@ static void handle_lslv(DisasContext *s, uint32_t insn)
 
     tcg_shift = tcg_temp_new_i64();
     tcg_gen_andi_i64(tcg_shift, cpu_reg(rm), is_32bit ? 31 : 63);
-    tcg_shifted = get_shift(rn, shift_type, tcg_shift);
+    tcg_shifted = get_shift(rn, shift_type, tcg_shift, is_32bit);
     tcg_gen_mov_i64(cpu_reg(rd), tcg_shifted);
     tcg_temp_free_i64(tcg_shift);
     tcg_temp_free_i64(tcg_shifted);
