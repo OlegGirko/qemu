@@ -646,6 +646,9 @@ static void handle_orr(DisasContext *s, uint32_t insn)
         if (is_n) {
             tcg_gen_not_i64(cpu_reg_sp(dest), cpu_reg_sp(dest));
         }
+        if (is_32bit) {
+            tcg_gen_ext32u_i64(cpu_reg_sp(dest), cpu_reg_sp(dest));
+        }
         return;
     }
 
