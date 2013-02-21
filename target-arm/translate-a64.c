@@ -559,6 +559,10 @@ static void handle_orri(DisasContext *s, uint32_t insn)
         break;
     }
 
+    if (is_32bit) {
+        tcg_gen_ext32u_i64(tcg_dst, tcg_dst);
+    }
+
     if (setflags) {
         gen_helper_pstate_add(pstate, pstate, tcg_dst, cpu_reg(31), tcg_dst);
     }
