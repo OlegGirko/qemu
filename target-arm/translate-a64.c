@@ -1764,7 +1764,7 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
             freg_offs += sizeof(float64);
         }
 
-        if (itof) {
+        if (itof && (!(rmode & 1))) {
             clear_fpreg(dest);
         }
 
