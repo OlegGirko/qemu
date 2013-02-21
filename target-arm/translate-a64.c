@@ -373,7 +373,8 @@ static void handle_msr(DisasContext *s, uint32_t insn)
     /* XXX what are these? */
     if (op0 == 3 && op1 == 3 && op2 == 2 && !crm && crn == 13) {
         tcg_gen_st_i64(cpu_reg(dest), cpu_env, offsetof(CPUARMState, sr.tpidr_el0));
-    } else if (op0 == 3 && op1 == 3 && op2 == 0 && crm == 4 && crn == 4) {
+    } else if (op0 == 3 && op1 == 3 && (op2 == 0 || op2 == 1) && crm == 4 && crn == 4) {
+        /* XXX this is wrong! */
         tcg_gen_st32_i64(cpu_reg(dest), cpu_env,
             offsetof(CPUARMState, vfp.xregs[ARM_VFP_FPSCR]));
     } else {
@@ -394,7 +395,8 @@ static void handle_mrs(DisasContext *s, uint32_t insn)
     /* XXX what are these? */
     if (op0 == 3 && op1 == 3 && op2 == 2 && !crm && crn == 13) {
         tcg_gen_ld_i64(cpu_reg(dest), cpu_env, offsetof(CPUARMState, sr.tpidr_el0));
-    } else if (op0 == 3 && op1 == 3 && op2 == 0 && crm == 4 && crn == 4) {
+    } else if (op0 == 3 && op1 == 3 && (op2 == 0 || op2 == 1) && crm == 4 && crn == 4) {
+        /* XXX this is wrong! */
         tcg_gen_ld32u_i64(cpu_reg(dest), cpu_env,
             offsetof(CPUARMState, vfp.xregs[ARM_VFP_FPSCR]));
     } else {
