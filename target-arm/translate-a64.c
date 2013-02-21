@@ -2514,7 +2514,7 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         break;
     default:
 unknown_insn:
-        printf("unknown insn: %08x\n", insn);
+        fprintf(stderr, "unknown insn: %08x\n", insn);
         unallocated_encoding(s);
         break;
     }
