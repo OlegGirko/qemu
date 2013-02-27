@@ -1135,7 +1135,7 @@ struct target_sigcontext {
 
 struct target_ucontext {
     abi_ulong tuc_flags;
-    struct target_ucontext *tuc_link;
+    abi_ulong tuc_link;
     target_stack_t tuc_stack;
     target_sigset_t tuc_sigmask;
     /* glibc uses a 1024-bit sigset_t */
@@ -1174,7 +1174,7 @@ struct target_aux_context {
     /* additional context to be added before "end" */
     struct target_aarch64_ctx end;
 };
-	
+
 struct target_rt_sigframe {
     struct target_siginfo info;
     struct target_ucontext uc;
@@ -1195,8 +1195,9 @@ static int target_setup_sigframe(struct target_rt_sigframe *sf,
     err |= __put_user(env->xregs[29], &sf->fp);
     err |= __put_user(env->xregs[30], &sf->lr);
 
-    for (i = 0; i < 31; i++)
+    for (i = 0; i < 31; i++) {
         err |= __put_user(env->xregs[i], &sf->uc.tuc_mcontext.regs[i]);
+    }
     err |= __put_user(env->sp, &sf->uc.tuc_mcontext.sp);
     err |= __put_user(env->pc, &sf->uc.tuc_mcontext.pc);
     err |= __put_user(env->pstate, &sf->uc.tuc_mcontext.pstate);
@@ -1204,11 +1205,13 @@ static int target_setup_sigframe(struct target_rt_sigframe *sf,
     err |= __put_user(/*current->thread.fault_address*/ 0,
 		      &sf->uc.tuc_mcontext.fault_address);
 
-    for (i = 0; i < TARGET_NSIG_WORDS; i++)
+    for (i = 0; i < TARGET_NSIG_WORDS; i++) {
         err |= __put_user(set->sig[i], &sf->uc.tuc_sigmask.sig[i]);
+    }
 
-    for (i = 0; i < 32 * 2; i++)
+    for (i = 0; i < 32 * 2; i++) {
         err |= __put_user(env->fregs[i], &aux->fpsimd.vregs[i]);
+    }
     err |= __put_user(/*env->fpsr*/0, &aux->fpsimd.fpsr);
     err |= __put_user(/*env->fpcr*/0, &aux->fpsimd.fpcr);
     err |= __put_user(TARGET_FPSIMD_MAGIC, &aux->fpsimd.head.magic);
@@ -1222,8 +1225,8 @@ static int target_setup_sigframe(struct target_rt_sigframe *sf,
     return err;
 }
 
-static int target_restore_sigframe (CPUARMState *env,
-				    struct target_rt_sigframe *sf)
+static int target_restore_sigframe(CPUARMState *env,
+				   struct target_rt_sigframe *sf)
 {
     sigset_t set;
     int i, err = 0;
@@ -1234,8 +1237,10 @@ static int target_restore_sigframe (CPUARMState *env,
     target_to_host_sigset(&set, &sf->uc.tuc_sigmask);
     sigprocmask(SIG_SETMASK, &set, NULL);
 
-    for (i = 0; i < 31; i++)
+    for (i = 0; i < 31; i++) {
         err |= __get_user(env->xregs[i], &sf->uc.tuc_mcontext.regs[i]);
+    }
+
     err |= __get_user(env->sp, &sf->uc.tuc_mcontext.sp);
     err |= __get_user(env->pc, &sf->uc.tuc_mcontext.pc);
     err |= __get_user(env->pstate, &sf->uc.tuc_mcontext.pstate);
@@ -1247,8 +1252,10 @@ static int target_restore_sigframe (CPUARMState *env,
     if (magic != TARGET_FPSIMD_MAGIC || size != sizeof(struct target_fpsimd_context))
         return 1;
 
-    for (i = 0; i < 32 * 2; i++)
+    for (i = 0; i < 32 * 2; i++) {
        err |= __get_user(env->fregs[i], &aux->fpsimd.vregs[i]);
+    }
+
 #if 0
     err |= __get_user(env->fpsr, &aux->fpsimd.fpsr);
     err |= __get_user(env->fpcr, &aux->fpsimd.fpcr);
@@ -1266,8 +1273,9 @@ static abi_ulong get_sigframe(struct target_sigaction *ka, CPUARMState *env)
     /*
      * This is the X/Open sanctioned signal stack switching.
      */
-    if ((ka->sa_flags & SA_ONSTACK) && !sas_ss_flags(sp))
+    if ((ka->sa_flags & SA_ONSTACK) && !sas_ss_flags(sp)) {
         sp = target_sigaltstack_used.ss_sp + target_sigaltstack_used.ss_size;
+    }
 
     sp = (sp - sizeof(struct target_rt_sigframe)) & ~15;
 
@@ -1283,8 +1291,9 @@ static void target_setup_frame(int usig, struct target_sigaction *ka,
     int err = 0;
 
     frame_addr = get_sigframe(ka, env);
-    if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0))
+    if (!lock_user_struct(VERIFY_WRITE, frame, frame_addr, 0)) {
 	goto give_sigsegv;
+    }
 
     err |= __put_user(0, &frame->uc.tuc_flags);
     err |= __put_user(0, &frame->uc.tuc_link);
@@ -1341,19 +1350,23 @@ long do_rt_sigreturn (CPUARMState *env)
     struct target_rt_sigframe *frame;
     abi_ulong frame_addr = env->sp;
 
-    if (frame_addr & 15)
+    if (frame_addr & 15) {
         goto badframe;
+    }
 
-    if (!lock_user_struct(VERIFY_READ, frame, frame_addr, 1))
+    if  (!lock_user_struct(VERIFY_READ, frame, frame_addr, 1)) {
         goto badframe;
+    }
 
-    if (target_restore_sigframe(env, frame))
+    if (target_restore_sigframe(env, frame)) {
         goto badframe;
+    }
 
     if (do_sigaltstack (frame_addr +
 			offsetof (struct target_rt_sigframe, uc.tuc_stack),
-			0, get_sp_from_cpustate(env)) == -EFAULT)
+			0, get_sp_from_cpustate(env)) == -EFAULT) {
         goto badframe;
+    }
 
     unlock_user_struct(frame, frame_addr, 0);
     return env->xregs[0];
