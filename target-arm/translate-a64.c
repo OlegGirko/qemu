@@ -762,6 +762,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
     bool setflags = get_bits(insn, 29, 1);
     bool sub_op = get_bits(insn, 30, 1);
     bool is_32bit = !get_bits(insn, 31, 1);
+    bool is_carry = (get_bits(insn, 24, 5) == 0x1a);
     int extend_type = 0;
     TCGv_i64 tcg_op2;
     TCGv_i64 tcg_src = tcg_temp_new_i64();
@@ -811,6 +812,13 @@ static void handle_add(DisasContext *s, uint32_t insn)
         tcg_gen_sub_i64(tcg_result, tcg_src, tcg_op2);
     } else {
         tcg_gen_add_i64(tcg_result, tcg_src, tcg_op2);
+    }
+
+    if (is_carry) {
+        TCGv_i64 tcg_carry = tcg_temp_new_i64();
+        tcg_gen_shri_i64(tcg_carry, pstate, PSTATE_C);
+        tcg_gen_andi_i64(tcg_carry, tcg_carry, 1);
+        tcg_gen_add_i64(tcg_result, tcg_result, tcg_carry);
     }
 
     if (setflags) {
@@ -2480,6 +2488,8 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
             handle_rev(s, insn);
         } else if ((insn & 0x7ffff800) == 0x5ac01000) {
             handle_clz(s, insn);
+        } else if (!get_bits(insn, 21, 3) && !get_bits(insn, 10, 6)) {
+            handle_add(s, insn);
         } else {
             goto unknown_insn;
         }
