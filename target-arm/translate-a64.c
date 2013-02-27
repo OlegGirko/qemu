@@ -816,7 +816,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
 
     if (is_carry) {
         TCGv_i64 tcg_carry = tcg_temp_new_i64();
-        tcg_gen_shri_i64(tcg_carry, pstate, PSTATE_C);
+        tcg_gen_shri_i64(tcg_carry, pstate, PSTATE_C_SHIFT);
         tcg_gen_andi_i64(tcg_carry, tcg_carry, 1);
         tcg_gen_add_i64(tcg_result, tcg_result, tcg_carry);
 #if 0 /* XXX This is how the 32bit target does it, but the spec doesn't sound like it */
