@@ -1247,10 +1247,12 @@ static int target_restore_sigframe(CPUARMState *env,
 
     err |= __get_user(magic, &aux->fpsimd.head.magic);
     err |= __get_user(size, &aux->fpsimd.head.size);
-    if (err)
+    if (err) {
         return err;
-    if (magic != TARGET_FPSIMD_MAGIC || size != sizeof(struct target_fpsimd_context))
+    }
+    if (magic != TARGET_FPSIMD_MAGIC || size != sizeof(struct target_fpsimd_context)) {
         return 1;
+    }
 
     for (i = 0; i < 32 * 2; i++) {
        err |= __get_user(env->fregs[i], &aux->fpsimd.vregs[i]);
@@ -1306,8 +1308,7 @@ static void target_setup_frame(int usig, struct target_sigaction *ka,
                       &frame->uc.tuc_stack.ss_size);
     err |= target_setup_sigframe(frame, env, set);
     /* mov x8,#__NR_rt_sigreturn; svc #0 */
-    err |= __put_user(0xd2800008 + (TARGET_NR_rt_sigreturn << 9),
-		      &frame->tramp[0]);
+    err |= __put_user(0xd2801168, &frame->tramp[0]);
     err |= __put_user(0xd4000001, &frame->tramp[1]);
     if (err == 0) {
 	env->xregs[0] = usig;
