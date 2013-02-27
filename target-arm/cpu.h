@@ -271,10 +271,10 @@ static inline bool is_a64(CPUARMState *env)
 #endif
 }
 
-#define PSTATE_N  (1 << 0)
-#define PSTATE_Z  (1 << 1)
-#define PSTATE_C  (1 << 2)
-#define PSTATE_V  (1 << 3)
+#define PSTATE_N  (1 << 3)
+#define PSTATE_Z  (1 << 2)
+#define PSTATE_C  (1 << 1)
+#define PSTATE_V  (1 << 0)
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
