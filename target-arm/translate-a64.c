@@ -2394,7 +2394,8 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
             handle_ldarx(s, insn);
         }
         break;
-    case 0x0D:
+    case 0x0c:
+    case 0x0d:
         reserved(s, insn, 29, 1, 1);
         handle_stp(s, insn);
         break;
