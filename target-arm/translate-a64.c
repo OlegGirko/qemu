@@ -401,6 +401,11 @@ static void handle_mrs(DisasContext *s, uint32_t insn)
         /* XXX this is wrong! */
         tcg_gen_ld32u_i64(cpu_reg(dest), cpu_env,
             offsetof(CPUARMState, vfp.xregs[ARM_VFP_FPSCR]));
+    } else if (op0 == 3 && op1 == 3 && op2 == 1 && crm == 0 && crn == 0) {
+        /* ctr_el0 */
+        /* CTR_EL0 [3:0] contains log2 of icache line size in words.
+           CTR_EL0 [19:16] contains log2 of dcache line size in words.  */
+        tcg_gen_movi_i64(cpu_reg(dest), 0x30003);
     } else {
         fprintf(stderr, "MRS: %d %d %d %d %d\n", op0, op1, op2, crm, crn);
         unallocated_encoding(s);
