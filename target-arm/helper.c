@@ -3421,20 +3421,24 @@ uint##isz##_t HELPER(vfp_to##name##p)(float##fsz x, uint32_t shift, \
         return 0; \
     } \
     tmp = float##fsz##_scalbn(x, shift, fpst); \
-    r = float##fsz##_to_##itype(tmp, fpst); \
+    if (((float_status*)fpstp)->float_rounding_mode == float_round_to_zero) { \
+        r = float##fsz##_to_##itype##_round_to_zero(tmp, fpst); \
+    } else { \
+        r = float##fsz##_to_##itype(tmp, fpst); \
+    } \
     return r; \
 }
 
-VFP_CONV_FIX(sh, d, 64, 64, int32, )
+VFP_CONV_FIX(sh, d, 64, 64, int16, )
 VFP_CONV_FIX(sl, d, 64, 64, int32, )
 VFP_CONV_FIX(sq, d, 64, 64, int64, )
-VFP_CONV_FIX(uh, d, 64, 64, uint32, u)
+VFP_CONV_FIX(uh, d, 64, 64, uint16, u)
 VFP_CONV_FIX(ul, d, 64, 64, uint32, u)
 VFP_CONV_FIX(uq, d, 64, 64, uint64, u)
-VFP_CONV_FIX(sh, s, 32, 32, int32, )
+VFP_CONV_FIX(sh, s, 32, 32, int16, )
 VFP_CONV_FIX(sl, s, 32, 32, int32, )
 VFP_CONV_FIX(sq, s, 32, 64, int64, )
-VFP_CONV_FIX(uh, s, 32, 32, uint32, u)
+VFP_CONV_FIX(uh, s, 32, 32, uint16, u)
 VFP_CONV_FIX(ul, s, 32, 32, uint32, u)
 VFP_CONV_FIX(uq, s, 32, 64, int64, u)
 #undef VFP_CONV_FIX

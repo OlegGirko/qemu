@@ -284,5 +284,6 @@ void HELPER(set_rmode)(uint32_t rmode, void *fp_status)
         break;
     /* XXX add fpcr rounding (exact and not exact) */
     }
+
     set_float_rounding_mode(rmode, fp_status);
 }
