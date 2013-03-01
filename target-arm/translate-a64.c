@@ -2336,12 +2336,11 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
         return;
     }
 
-    clear_fpreg(rd);
-
     tcg_gen_st_i64(tcg_res_1, cpu_env, freg_offs_d);
-    if (is_q) {
-        tcg_gen_st_i64(tcg_res_2, cpu_env, freg_offs_d + sizeof(float64));
+    if (!is_q) {
+        tcg_gen_movi_i64(tcg_res_2, 0);
     }
+    tcg_gen_st_i64(tcg_res_2, cpu_env, freg_offs_d + sizeof(float64));
 
     tcg_temp_free_i64(tcg_op1_1);
     tcg_temp_free_i64(tcg_op1_2);
@@ -2349,6 +2348,127 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_op2_2);
     tcg_temp_free_i64(tcg_res_1);
     tcg_temp_free_i64(tcg_res_2);
+}
+
+/* SIMD movi */
+static void handle_simdmovi(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int cmode = get_bits(insn, 12, 4);
+    uint64_t abcdefgh = get_bits(insn, 5, 5) | (get_bits(insn, 16, 3) << 5);
+    bool is_neg = get_bits(insn, 29, 1);
+    bool is_q = get_bits(insn, 30, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    uint64_t imm = 0;
+    int shift, i;
+    TCGv_i64 tcg_op1_1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op1_2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res_1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res_2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_imm;
+
+    switch ((cmode >> 1) & 0x7) {
+    case 0:
+    case 1:
+    case 2:
+    case 3:
+        shift = ((cmode >> 1) & 0x7) * 8;
+        imm = (abcdefgh << shift) | (abcdefgh << (32 + shift));
+        break;
+    case 4:
+    case 5:
+        shift = ((cmode >> 1) & 0x1) * 8;
+        imm = (abcdefgh << shift) |
+              (abcdefgh << (16 + shift)) |
+              (abcdefgh << (32 + shift)) |
+              (abcdefgh << (48 + shift));
+        break;
+    case 6:
+        if (cmode & 1) {
+            imm = (abcdefgh << 8) |
+                  (abcdefgh << 48) |
+                  0x000000ff000000ffULL;
+        } else {
+            imm = (abcdefgh << 16) |
+                  (abcdefgh << 56) |
+                  0x0000ffff0000ffffULL;
+        }
+        break;
+    case 7:
+        if (!(cmode & 1) && !is_neg) {
+            imm = abcdefgh |
+                  (abcdefgh << 8) |
+                  (abcdefgh << 16) |
+                  (abcdefgh << 24) |
+                  (abcdefgh << 32) |
+                  (abcdefgh << 40) |
+                  (abcdefgh << 48) |
+                  (abcdefgh << 56);
+        } else if (!(cmode & 1) && is_neg) {
+            imm = 0;
+            for (i = 0; i < 8; i++) {
+                if ((abcdefgh) & (1 << (7 - i))) {
+                    imm |= 0xffULL << (i * 8);
+                }
+            }
+        } else if (cmode & 1) {
+            shift = is_neg ? 48 : 19;
+            imm = (abcdefgh & 0x1f) << 19;
+            if (abcdefgh & 0x80) {
+                imm |= 0x80000000;
+            }
+            if (!(abcdefgh & 0x40)) {
+                imm |= 0x40000000;
+            }
+            if (abcdefgh & 0x20) {
+                imm |= is_neg ? 0x3fc00000 : 0x3e000000;
+            }
+            imm |= (imm << 32);
+        }
+        shift = ((cmode >> 1) & 0x1) * 8;
+        break;
+    }
+
+    if (is_neg) {
+        imm = ~imm;
+    }
+    tcg_imm = tcg_const_i64(imm);
+
+    tcg_gen_ld_i64(tcg_op1_1, cpu_env, freg_offs_d);
+    if (is_q) {
+        tcg_gen_ld_i64(tcg_op1_2, cpu_env, freg_offs_d + sizeof(float64));
+    } else {
+        tcg_gen_movi_i64(tcg_op1_2, 0);
+    }
+
+    if ((cmode == 0xf) && is_neg && !is_q) {
+        unallocated_encoding(s);
+        return;
+    } else if ((cmode & 1) && is_neg) {
+        /* AND (BIC) */
+        tcg_gen_and_i64(tcg_res_1, tcg_op1_1, tcg_imm);
+        tcg_gen_and_i64(tcg_res_2, tcg_op1_2, tcg_imm);
+    } else if ((cmode & 1) && !is_neg) {
+        /* ORR */
+        tcg_gen_or_i64(tcg_res_1, tcg_op1_1, tcg_imm);
+        tcg_gen_or_i64(tcg_res_2, tcg_op1_2, tcg_imm);
+    } else {
+        /* MOVI */
+        tcg_gen_mov_i64(tcg_res_1, tcg_imm);
+        tcg_gen_mov_i64(tcg_res_2, tcg_imm);
+    }
+
+    tcg_gen_st_i64(tcg_res_1, cpu_env, freg_offs_d);
+    if (!is_q) {
+        tcg_gen_movi_i64(tcg_res_2, 0);
+    }
+    tcg_gen_st_i64(tcg_res_2, cpu_env, freg_offs_d + sizeof(float64));
+
+    tcg_temp_free_i64(tcg_op1_1);
+    tcg_temp_free_i64(tcg_op1_2);
+    tcg_temp_free_i64(tcg_res_1);
+    tcg_temp_free_i64(tcg_res_2);
+    tcg_temp_free_i64(tcg_imm);
 }
 
 static void handle_dupg(DisasContext *s, uint32_t insn)
@@ -2501,6 +2621,14 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         } else if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
                    get_bits(insn, 21, 1) && get_bits(insn, 10, 1)) {
             handle_simd3su0(s, insn);
+        } else {
+            goto unknown_insn;
+        }
+        break;
+    case 0x0f:
+        if (!get_bits(insn, 31, 1) && !get_bits(insn, 19, 5) &&
+            (get_bits(insn, 10, 2) == 1)) {
+            handle_simdmovi(s, insn);
         } else {
             goto unknown_insn;
         }
