@@ -1629,6 +1629,7 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
     TCGv_i64 tcg_double;
     TCGv_i64 tcg_fpstatus = get_fpstatus_ptr();
     TCGv_i32 tcg_shift = tcg_const_i32(scale);
+    TCGv_i32 tcg_rmode = tcg_const_i32(rmode);
     TCGv_i64 tcg_tmp;
 
     if (direction) {
@@ -1653,7 +1654,8 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
         }
         tcg_int = tcg_tmp;
     }
-    /* XXX handle rmode */
+
+    gen_helper_set_rmode(tcg_rmode, tcg_fpstatus);
 
     switch ((direction ? 0x10 : 0)|
             (is_double ? 0x1 : 0) |
@@ -1722,12 +1724,17 @@ static void handle_fpfpcvt(DisasContext *s, uint32_t insn, bool direction,
         unallocated_encoding(s);
     }
 
+    /* XXX use fpcr */
+    tcg_gen_movi_i32(tcg_rmode, -1);
+    gen_helper_set_rmode(tcg_rmode, tcg_fpstatus);
+
     if (is_32bit && direction) {
         tcg_gen_ext32u_i64(tcg_int, tcg_int);
     }
 
     tcg_temp_free_i64(tcg_fpstatus);
     tcg_temp_free_i32(tcg_shift);
+    tcg_temp_free_i32(tcg_rmode);
 }
 
 /* fixed <-> floating conversion */
@@ -1756,7 +1763,7 @@ static void handle_fpfpconv(DisasContext *s, uint32_t insn)
         return;
     }
 
-    handle_fpfpcvt(s, insn, direction, 0);
+    handle_fpfpcvt(s, insn, direction, ROUND_MODE_ZERO);
 }
 
 /* floating <-> integer conversion */
@@ -1921,8 +1928,18 @@ static void handle_fpdp1s64(DisasContext *s, uint32_t insn)
     case 0xc: /* FRINTA */
     case 0xe: /* FRINTX */
     case 0xf: /* FRINTI */
+    {
+        TCGv_i32 tcg_rmode = tcg_const_i32(opcode & 7);
+
+        gen_helper_set_rmode(tcg_rmode, fpst);
         gen_helper_rintd(tcg_res, tcg_op, fpst);
+
+        /* XXX use fpcr */
+        tcg_gen_movi_i32(tcg_rmode, -1);
+        gen_helper_set_rmode(tcg_rmode, fpst);
+        tcg_temp_free_i32(tcg_rmode);
         break;
+    }
     default:
         unallocated_encoding(s);
         return;
@@ -1983,8 +2000,18 @@ static void handle_fpdp1s32(DisasContext *s, uint32_t insn)
     case 0xc: /* FRINTA */
     case 0xe: /* FRINTX */
     case 0xf: /* FRINTI */
+    {
+        TCGv_i32 tcg_rmode = tcg_const_i32(opcode & 7);
+
+        gen_helper_set_rmode(tcg_rmode, fpst);
         gen_helper_rints(tcg_res, tcg_op, fpst);
+
+        /* XXX use fpcr */
+        tcg_gen_movi_i32(tcg_rmode, -1);
+        gen_helper_set_rmode(tcg_rmode, fpst);
+        tcg_temp_free_i32(tcg_rmode);
         break;
+    }
     default:
         unallocated_encoding(s);
         return;

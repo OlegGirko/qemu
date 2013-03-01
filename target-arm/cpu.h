@@ -280,6 +280,11 @@ static inline bool is_a64(CPUARMState *env)
 #define PSTATE_V_SHIFT 0
 #define PSTATE_V  (1 << PSTATE_V_SHIFT)
 
+#define ROUND_MODE_TIEEVEN  0
+#define ROUND_MODE_UP       1
+#define ROUND_MODE_DOWN     2
+#define ROUND_MODE_ZERO     3
+
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
    is returned if the signal was handled by the virtual CPU.  */

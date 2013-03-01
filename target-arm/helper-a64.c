@@ -266,3 +266,23 @@ float32 HELPER(rints)(float32 x, void *fp_status)
     return float32_round_to_int(x, fp_status);
 }
 
+void HELPER(set_rmode)(uint32_t rmode, void *fp_status)
+{
+    switch (rmode) {
+    case ROUND_MODE_TIEEVEN:
+    default:
+        rmode = float_round_nearest_even;
+        break;
+    case ROUND_MODE_UP:
+        rmode = float_round_up;
+        break;
+    case ROUND_MODE_DOWN:
+        rmode = float_round_down;
+        break;
+    case ROUND_MODE_ZERO:
+        rmode = float_round_to_zero;
+        break;
+    /* XXX add fpcr rounding (exact and not exact) */
+    }
+    set_float_rounding_mode(rmode, fp_status);
+}
