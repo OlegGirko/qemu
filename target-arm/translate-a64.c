@@ -412,6 +412,12 @@ static void handle_mrs(DisasContext *s, uint32_t insn)
     }
 }
 
+static void handle_sys(DisasContext *s, uint32_t insn)
+{
+    /* XXX simply ignore sys for now, need to start worrying when we implement
+           system emulation */
+}
+
 /* PC relative address calculation */
 static void handle_adr(DisasContext *s, uint32_t insn)
 {
@@ -2688,6 +2694,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
             break;
         } else if ((insn & 0xfffff09f) == 0xd503309f) {
             /* barrier instructions */
+            break;
+        } else if (get_bits(insn, 19, 13) == 0x1aa1) {
+            handle_sys(s, insn);
             break;
         } else {
             goto unknown_insn;
