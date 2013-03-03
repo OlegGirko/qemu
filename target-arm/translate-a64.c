@@ -855,15 +855,10 @@ static void handle_add(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_result);
 }
 
-static void ldst_do_vec(DisasContext *s, int dest, TCGv_i64 tcg_addr_real,
-                        int size, bool is_store)
+static void ldst_do_vec_int(DisasContext *s, int freg_offs, TCGv_i64 tcg_addr,
+                            int size, bool is_store)
 {
     TCGv_i64 tcg_tmp = tcg_temp_new_i64();
-    TCGv_i64 tcg_addr = tcg_temp_new_i64();
-    int freg_offs = offsetof(CPUARMState, vfp.regs[dest * 2]);
-
-    /* we don't want to modify the caller's tcg_addr */
-    tcg_gen_mov_i64(tcg_addr, tcg_addr_real);
 
     if (is_store) {
         switch (size) {
@@ -891,7 +886,6 @@ static void ldst_do_vec(DisasContext *s, int dest, TCGv_i64 tcg_addr_real,
             break;
         }
     } else {
-        clear_fpreg(dest);
         switch (size) {
         case 0:
             tcg_gen_qemu_ld8u(tcg_tmp, tcg_addr, get_mem_index(s));
@@ -917,6 +911,25 @@ static void ldst_do_vec(DisasContext *s, int dest, TCGv_i64 tcg_addr_real,
             break;
         }
     }
+
+    tcg_temp_free_i64(tcg_tmp);
+}
+
+static void ldst_do_vec(DisasContext *s, int dest, TCGv_i64 tcg_addr_real,
+                        int size, bool is_store)
+{
+    TCGv_i64 tcg_addr = tcg_temp_new_i64();
+    int freg_offs = offsetof(CPUARMState, vfp.regs[dest * 2]);
+
+    /* we don't want to modify the caller's tcg_addr */
+    tcg_gen_mov_i64(tcg_addr, tcg_addr_real);
+
+    if (!is_store) {
+        /* normal ldst clears non-loaded bits */
+        clear_fpreg(dest);
+    }
+
+    ldst_do_vec_int(s, freg_offs, tcg_addr, size, is_store);
 
     tcg_temp_free(tcg_addr);
 }
@@ -2241,6 +2254,42 @@ static void handle_fpdp3s32(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_tmp);
 }
 
+static void simd_ld(TCGv_i64 tcg_reg, int freg_offs, int size)
+{
+    switch (size) {
+    case 0:
+        tcg_gen_ld8u_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 1:
+        tcg_gen_ld16u_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 2:
+        tcg_gen_ld32u_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 3:
+        tcg_gen_ld_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    }
+}
+
+static void simd_st(TCGv_i64 tcg_reg, int freg_offs, int size)
+{
+    switch (size) {
+    case 0:
+        tcg_gen_st8_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 1:
+        tcg_gen_st16_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 2:
+        tcg_gen_st32_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 3:
+        tcg_gen_st_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    }
+}
+
 static void handle_v3add(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
@@ -2255,54 +2304,25 @@ static void handle_v3add(DisasContext *s, uint32_t insn)
     TCGv_i64 tcg_op2 = tcg_temp_new_i64();
     TCGv_i64 tcg_res = tcg_temp_new_i64();
 
-    switch (size) {
-    case 0:
-        tcg_gen_ld8u_i64(tcg_op1, cpu_env, freg_offs_n);
-        tcg_gen_ld8u_i64(tcg_op2, cpu_env, freg_offs_m);
-        break;
-    case 1:
-        tcg_gen_ld16u_i64(tcg_op1, cpu_env, freg_offs_n);
-        tcg_gen_ld16u_i64(tcg_op2, cpu_env, freg_offs_m);
-        break;
-    case 2:
-        tcg_gen_ld32u_i64(tcg_op1, cpu_env, freg_offs_n);
-        tcg_gen_ld32u_i64(tcg_op2, cpu_env, freg_offs_m);
-        break;
-    case 3:
-        tcg_gen_ld_i64(tcg_op1, cpu_env, freg_offs_n);
-        tcg_gen_ld_i64(tcg_op2, cpu_env, freg_offs_m);
-        break;
-    }
+    simd_ld(tcg_op1, freg_offs_n, size);
+    simd_ld(tcg_op2, freg_offs_m, size);
 
     if (is_sub) {
         tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_op2);
     } else {
         tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
     }
-    clear_fpreg(rd);
 
-    switch (size) {
-    case 0:
-        tcg_gen_st8_i64(tcg_res, cpu_env, freg_offs_d);
-        break;
-    case 1:
-        tcg_gen_st16_i64(tcg_res, cpu_env, freg_offs_d);
-        break;
-    case 2:
-        tcg_gen_st32_i64(tcg_res, cpu_env, freg_offs_d);
-        break;
-    case 3:
-        tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
-        break;
-    }
+    clear_fpreg(rd);
+    simd_st(tcg_res, freg_offs_d, size);
 
     tcg_temp_free_i64(tcg_op1);
     tcg_temp_free_i64(tcg_op2);
     tcg_temp_free_i64(tcg_res);
 }
 
-/* SIMD 3 same (U=0) */
-static void handle_simd3su0(DisasContext *s, uint32_t insn)
+/* SIMD ORR */
+static void handle_simdorr(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
@@ -2361,6 +2381,56 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_op2_2);
     tcg_temp_free_i64(tcg_res_1);
     tcg_temp_free_i64(tcg_res_2);
+}
+
+/* SIMD 3 same (U=0) */
+static void handle_simd3su0(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 5);
+    int size = get_bits(insn, 22, 2);
+    int opcode = get_bits(insn, 11, 5);
+    bool is_q = get_bits(insn, 30, 1);
+    bool is_sub = get_bits(insn, 29, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    int ebytes = (1 << size);
+    int i;
+
+    for (i = 0; i < 16; i += ebytes) {
+        simd_ld(tcg_op1, freg_offs_n + i , size);
+        simd_ld(tcg_op2, freg_offs_m + i, size);
+
+        switch (opcode) {
+        case 0x10: /* ADD / SUB */
+            if (is_sub) {
+                tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_op2);
+            } else {
+                tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
+            }
+            break;
+        default:
+            unallocated_encoding(s);
+            return;
+        }
+
+        simd_st(tcg_res, freg_offs_d + i, size);
+    }
+
+    if (!is_q) {
+        TCGv_i64 tcg_zero = tcg_const_i64(0);
+        simd_st(tcg_zero, freg_offs_d + sizeof(float64), 3);
+        tcg_temp_free_i64(tcg_zero);
+    }
+
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_op2);
+    tcg_temp_free_i64(tcg_res);
 }
 
 /* SIMD movi */
@@ -2818,7 +2888,11 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
             (get_bits(insn, 10, 6) == 0x7)) {
             handle_insg(s, insn);
         } else if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
-                   get_bits(insn, 21, 1) && get_bits(insn, 10, 1)) {
+                   get_bits(insn, 21, 1) && get_bits(insn, 10, 1) &&
+                   (get_bits(insn, 11, 5) == 0x3)) {
+            handle_simdorr(s, insn);
+        } else if (!get_bits(insn, 31, 1) && get_bits(insn, 21, 1) &&
+                   get_bits(insn, 10, 1)) {
             handle_simd3su0(s, insn);
         } else {
             goto unknown_insn;
