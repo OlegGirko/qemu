@@ -4339,10 +4339,34 @@ static int do_fork(CPUArchState *env, unsigned int flags, abi_ulong newsp,
         /* agraf: Pin ourselves to a single CPU when running multi-threaded.
            This turned out to improve stability for me. */
         {
-            cpu_set_t mask;
-            CPU_ZERO(&mask);
-            CPU_SET(0, &mask);
-            sched_setaffinity(0, sizeof(mask), &mask);
+	    static int thecpu = -1;
+	    cpu_set_t mask;
+	    if (thecpu < 0) {
+		/* Try to find out a randomized CPU to which to pin,
+		   so that potential parallel qemu processes don't
+		   compete for the same CPU.  Select one of the
+		   CPUs to which we're pinned already by counting
+		   them and choosing the "random"th one.  */
+		int count, i;
+		if (sched_getaffinity (0, sizeof(mask), &mask) < 0)
+		    thecpu = 0;
+		else {
+		    count = CPU_COUNT (&mask);
+		    if (count > 1) {
+			thecpu = getpid() % count;
+			for (i = 0; i < CPU_SETSIZE; i++)
+			    if (CPU_ISSET (i, &mask)) {
+			        if (thecpu-- == 0)
+				    break;
+			    }
+			thecpu = i;
+		    } else
+		        thecpu = 0;
+		}
+	    }
+	    CPU_ZERO(&mask);
+	    CPU_SET(thecpu, &mask);
+	    sched_setaffinity(0, sizeof(mask), &mask);
         }
 
         /* Grab a mutex so that thread setup appears atomic.  */
