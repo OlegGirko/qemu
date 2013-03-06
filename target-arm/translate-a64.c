@@ -1792,6 +1792,39 @@ static void handle_fpfpconv(DisasContext *s, uint32_t insn)
     handle_fpfpcvt(s, insn, direction, ROUND_MODE_ZERO);
 }
 
+/* fmov (immediate) */
+static void handle_fmovi(DisasContext *s, uint32_t insn)
+{
+    int rd = get_reg(insn);
+    int is_double = get_bits(insn, 22, 2);
+    int imm8 = get_bits(insn, 13, 8);
+    uint64_t imm;
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    TCGv_i64 tcg_res;
+
+    if (is_double > 1) {
+        unallocated_encoding(s);
+        return;
+    }
+
+    if (is_double) {
+        imm = (get_bits(imm8, 7, 1) ? 0x8000 : 0) |
+              (get_bits(imm8, 6, 1) ? 0x3fc0 : 0x4000) |
+              get_bits(imm8, 0, 6);
+        imm <<= 48;
+    } else {
+        imm = (get_bits(imm8, 7, 1) ? 0x8000 : 0) |
+              (get_bits(imm8, 6, 1) ? 0x3e00 : 0x4000) |
+              (get_bits(imm8, 0, 6) << 3);
+        imm <<= 16;
+    }
+
+    tcg_res = tcg_const_i64(imm);
+    clear_fpreg(rd);
+    tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
+    tcg_temp_free_i64(tcg_res);
+}
+
 /* floating <-> integer conversion */
 static void handle_fpintconv(DisasContext *s, uint32_t insn)
 {
@@ -3106,6 +3139,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
     case 0x1e:
         if (!get_bits(insn, 21, 1) && !get_bits(insn, 30, 1)) {
             handle_fpfpconv(s, insn);
+        } else if (!get_bits(insn, 29, 3) && get_bits(insn, 21, 1) &&
+                   (get_bits(insn, 5, 8) == 0x80)) {
+            handle_fmovi(s, insn);
         } else if (get_bits(insn, 21, 1) && !get_bits(insn, 30, 1) &&
                    !get_bits(insn, 10, 6)) {
             handle_fpintconv(s, insn);
