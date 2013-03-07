@@ -644,7 +644,7 @@ int do_sigaction(int sig, const struct target_sigaction *act,
         if (host_sig != SIGSEGV && host_sig != SIGBUS) {
             sigfillset(&act1.sa_mask);
             act1.sa_flags = SA_SIGINFO;
-#ifdef TARGET_ARM
+#if defined(TARGET_ARM) || defined(TARGET_ARM64)
             /* Breaks boehm-gc, we have to do this manually */
             /*
              * Unfortunately our hacks only work as long as we don't do parallel
