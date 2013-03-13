@@ -2287,19 +2287,28 @@ static void handle_fpdp3s32(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_tmp);
 }
 
-static void simd_ld(TCGv_i64 tcg_reg, int freg_offs, int size)
+static void simd_ld(TCGv_i64 tcg_reg, int freg_offs, int size, bool sext)
 {
-    switch (size) {
+    switch ((size << 1) | (int)sext) {
     case 0:
         tcg_gen_ld8u_i64(tcg_reg, cpu_env, freg_offs);
         break;
     case 1:
-        tcg_gen_ld16u_i64(tcg_reg, cpu_env, freg_offs);
+        tcg_gen_ld8s_i64(tcg_reg, cpu_env, freg_offs);
         break;
     case 2:
-        tcg_gen_ld32u_i64(tcg_reg, cpu_env, freg_offs);
+        tcg_gen_ld16u_i64(tcg_reg, cpu_env, freg_offs);
         break;
     case 3:
+        tcg_gen_ld16s_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 4:
+        tcg_gen_ld32u_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 5:
+        tcg_gen_ld32s_i64(tcg_reg, cpu_env, freg_offs);
+        break;
+    case 6: case 7:
         tcg_gen_ld_i64(tcg_reg, cpu_env, freg_offs);
         break;
     }
@@ -2337,8 +2346,8 @@ static void handle_v3add(DisasContext *s, uint32_t insn)
     TCGv_i64 tcg_op2 = tcg_temp_new_i64();
     TCGv_i64 tcg_res = tcg_temp_new_i64();
 
-    simd_ld(tcg_op1, freg_offs_n, size);
-    simd_ld(tcg_op2, freg_offs_m, size);
+    simd_ld(tcg_op1, freg_offs_n, size, false);
+    simd_ld(tcg_op2, freg_offs_m, size, false);
 
     if (is_sub) {
         tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_op2);
@@ -2425,7 +2434,7 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     int size = get_bits(insn, 22, 2);
     int opcode = get_bits(insn, 11, 5);
     bool is_q = get_bits(insn, 30, 1);
-    bool is_sub = get_bits(insn, 29, 1);
+    bool is_u = get_bits(insn, 29, 1);
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
     int freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
@@ -2435,18 +2444,28 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     int ebytes = (1 << size);
     int i;
 
-    for (i = 0; i < 16; i += ebytes) {
-        simd_ld(tcg_op1, freg_offs_n + i , size);
-        simd_ld(tcg_op2, freg_offs_m + i, size);
+    for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
+        simd_ld(tcg_op1, freg_offs_n + i, size, is_u);
+        simd_ld(tcg_op2, freg_offs_m + i, size, is_u);
 
         switch (opcode) {
         case 0x10: /* ADD / SUB */
-            if (is_sub) {
+            if (is_u) {
                 tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_op2);
             } else {
                 tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
             }
             break;
+	case 0x0c: /* SMAX / UMAX */
+	    tcg_gen_movcond_i64 (is_u ? TCG_COND_GEU : TCG_COND_GE,
+				 tcg_res,
+				 tcg_op1, tcg_op2, tcg_op1, tcg_op2);
+	    break;
+	case 0x0d: /* SMIN / UMIN */
+	    tcg_gen_movcond_i64 (is_u ? TCG_COND_LEU : TCG_COND_LE,
+				 tcg_res,
+				 tcg_op1, tcg_op2, tcg_op1, tcg_op2);
+	    break;
         default:
             unallocated_encoding(s);
             return;
@@ -2464,6 +2483,94 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_op1);
     tcg_temp_free_i64(tcg_op2);
     tcg_temp_free_i64(tcg_res);
+}
+
+static void handle_simd_accross(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int size = get_bits(insn, 22, 2);
+    int opcode = get_bits(insn, 12, 5);
+    bool is_q = get_bits(insn, 30, 1);
+    bool is_u = get_bits(insn, 29, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    int ebytes = (1 << size);
+    int i;
+
+    /* For the non-floats size can't be 3, and if it's 2 then
+       Q is set (128 bits).  So for ADDLV which uses a 2*esize
+       result, we still fit into 64 bit.
+       The float min/max (and ADDV) are defined via
+       the Reduce pseudoop that uses divide and conquer on the two halfs
+       of the input.  The integer ones user linear iteration over the
+       vec elements.  Both should be equivalent.  */
+    simd_ld(tcg_res, freg_offs_n + 0, size, is_u);
+    for (i = ebytes; i < (is_q ? 16 : 8); i += ebytes) {
+        simd_ld(tcg_op1, freg_offs_n + i, size, is_u);
+
+        switch (opcode) {
+	case 0x03: /* SADDLV / UADDLV */
+	    tcg_gen_add_i64(tcg_res, tcg_res, tcg_op1);
+	    break;
+	case 0x0a: /* SMAXV / UMAXV */
+	    tcg_gen_movcond_i64 (is_u ? TCG_COND_GEU : TCG_COND_GE,
+				 tcg_res,
+				 tcg_res, tcg_op1, tcg_res, tcg_op1);
+	    break;
+	case 0x1a: /* SMINV / UMINV */
+	    tcg_gen_movcond_i64 (is_u ? TCG_COND_LEU : TCG_COND_LE,
+				 tcg_res,
+				 tcg_res, tcg_op1, tcg_res, tcg_op1);
+	    break;
+	case 0x1b: /* ADDV */
+	    if (is_u) {
+	        unallocated_encoding(s);
+		return;
+	    }
+	    /* ADDV actually is supposed to use esize width intermediate
+	       results, due to 2-complement we can as well use a 64bit
+	       intermediate and truncate later.  */
+	    tcg_gen_add_i64(tcg_res, tcg_res, tcg_op1);
+	    break;
+
+	case 0x0c: /* FMAXNMV / FMINNMV */
+	case 0x0f: /* FMAXV / FMINV*/
+	    /* We don't yet implement these.  */
+	default:
+	    unallocated_encoding(s);
+	    return;
+        }
+
+    }
+
+    tcg_temp_free_i64(tcg_op1);
+    
+    if (opcode == 0x03) {
+	/* ADDLV uses a 2*esize result, and esize can't be 64.  */
+	switch (size) {
+	case 0: tcg_gen_ext16u_i64(tcg_res, tcg_res); break;
+	case 1: tcg_gen_ext32u_i64(tcg_res, tcg_res); break;
+	}
+	simd_st(tcg_res, freg_offs_d + 0, size + 1);
+    } else {
+	switch (size) {
+	case 0: tcg_gen_ext8u_i64(tcg_res, tcg_res); break;
+	case 1: tcg_gen_ext16u_i64(tcg_res, tcg_res); break;
+	case 2: tcg_gen_ext32u_i64(tcg_res, tcg_res); break;
+	}
+	simd_st(tcg_res, freg_offs_d + 0, size);
+    }
+
+    tcg_temp_free_i64(tcg_res);
+
+    /* The upper part of the vector here is always zero.  Irrespective
+       of the Q bit.  */
+    TCGv_i64 tcg_zero = tcg_const_i64(0);
+    simd_st(tcg_zero, freg_offs_d + sizeof(float64), 3);
+    tcg_temp_free_i64(tcg_zero);
 }
 
 /* SIMD movi */
@@ -2628,7 +2735,7 @@ static void handle_ushll(DisasContext *s, uint32_t insn)
     }
 
     for (i = 0; i < (8 / ebytes); i++) {
-        simd_ld(tcg_tmp, freg_offs_n + (i * ebytes), size);
+        simd_ld(tcg_tmp, freg_offs_n + (i * ebytes), size, false);
         tcg_gen_shli_i64(tcg_tmp, tcg_tmp, shift);
         simd_st(tcg_tmp, freg_offs_d + (i * ebytes * 2), size + 1);
     }
@@ -2669,7 +2776,7 @@ static void handle_simdshl(DisasContext *s, uint32_t insn)
     }
 
     for (i = 0; i < (16 / ebytes); i++) {
-        simd_ld(tcg_tmp, freg_offs_n + (i * ebytes), size);
+        simd_ld(tcg_tmp, freg_offs_n + (i * ebytes), size, false);
         tcg_gen_shli_i64(tcg_tmp, tcg_tmp, shift);
         simd_st(tcg_tmp, freg_offs_d + (i * ebytes), size);
     }
@@ -3023,6 +3130,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         } else if (!get_bits(insn, 31, 1) && get_bits(insn, 21, 1) &&
                    get_bits(insn, 10, 1)) {
             handle_simd3su0(s, insn);
+	} else if (!get_bits(insn, 31, 1) && get_bits(insn, 17, 5) == 0x18 &&
+		   get_bits(insn, 11, 1) && !get_bits(insn, 10, 1)) {
+	    handle_simd_accross(s, insn);
         } else {
             goto unknown_insn;
         }
