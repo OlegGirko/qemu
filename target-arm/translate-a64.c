@@ -2573,6 +2573,50 @@ static void handle_simd_accross(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_zero);
 }
 
+/* AdvSIMD two-reg misc */
+static void handle_simd_misc(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int size = get_bits(insn, 22, 2);
+    int opcode = get_bits(insn, 12, 5);
+    bool is_q = get_bits(insn, 30, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    int ebytes = (1 << size);
+    int i;
+
+    switch (opcode) {
+    case 0x12: /* XTN, Extract narrow */
+	if (size == 3) {
+	    unallocated_encoding(s);
+	    return;
+	}
+	for (i = 0; i < 8; i += ebytes) {
+	    /* XXX Should we be able to just generate a smaller
+	       load?  */
+	    simd_ld(tcg_op1, freg_offs_n + 2 * i, size + 1, false);
+	    tcg_gen_deposit_i64(tcg_res, tcg_res, tcg_op1, 8 * i, 8 << size);
+	}
+	simd_st(tcg_res, freg_offs_d + (is_q ? sizeof(float64) : 0), 3);
+	break;
+    default:
+	unallocated_encoding(s);
+	return;
+    }
+
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_res);
+
+    if (!is_q) {
+        TCGv_i64 tcg_zero = tcg_const_i64(0);
+        simd_st(tcg_zero, freg_offs_d + sizeof(float64), 3);
+        tcg_temp_free_i64(tcg_zero);
+    }
+}
+
 /* SIMD movi */
 static void handle_simdmovi(DisasContext *s, uint32_t insn)
 {
@@ -3133,6 +3177,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 	} else if (!get_bits(insn, 31, 1) && get_bits(insn, 17, 5) == 0x18 &&
 		   get_bits(insn, 11, 1) && !get_bits(insn, 10, 1)) {
 	    handle_simd_accross(s, insn);
+	} else if (!get_bits(insn, 31, 1) && get_bits(insn, 17, 5) == 0x10 &&
+		   get_bits(insn, 11, 1) && !get_bits(insn, 10, 1)) {
+	    handle_simd_misc(s, insn);
         } else {
             goto unknown_insn;
         }
