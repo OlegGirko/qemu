@@ -3257,6 +3257,48 @@ void vfp_set_fpscr(CPUARMState *env, uint32_t val)
     HELPER(vfp_set_fpscr)(env, val);
 }
 
+/* Some softfloat routines that are convenient.  */
+float32 float32_minnm (float32 a, float32 b, float_status *fpst);
+float32 float32_maxnm (float32 a, float32 b, float_status *fpst);
+float64 float64_minnm (float64 a, float64 b, float_status *fpst);
+float64 float64_maxnm (float64 a, float64 b, float_status *fpst);
+
+float32 float32_minnm (float32 a, float32 b, float_status *fpst)
+{
+  if (float32_is_quiet_nan (a) && !float32_is_quiet_nan (b))
+    a = float32_infinity;
+  else if (!float32_is_quiet_nan (a) && float32_is_quiet_nan (b))
+    b = float32_infinity;
+  return float32_min (a, b, fpst);
+}
+
+float32 float32_maxnm (float32 a, float32 b, float_status *fpst)
+{
+  if (float32_is_quiet_nan (a) && !float32_is_quiet_nan (b))
+    a = float32_set_sign (float32_infinity, 1);
+  else if (!float32_is_quiet_nan (a) && float32_is_quiet_nan (b))
+    b = float32_set_sign (float32_infinity, 1);
+  return float32_max (a, b, fpst);
+}
+
+float64 float64_minnm (float64 a, float64 b, float_status *fpst)
+{
+  if (float64_is_quiet_nan (a) && !float64_is_quiet_nan (b))
+    a = float64_infinity;
+  else if (!float64_is_quiet_nan (a) && float64_is_quiet_nan (b))
+    b = float64_infinity;
+  return float64_min (a, b, fpst);
+}
+
+float64 float64_maxnm (float64 a, float64 b, float_status *fpst)
+{
+  if (float64_is_quiet_nan (a) && !float64_is_quiet_nan (b))
+    a = float64_set_sign (float64_infinity, 1);
+  else if (!float64_is_quiet_nan (a) && float64_is_quiet_nan (b))
+    b = float64_set_sign (float64_infinity, 1);
+  return float64_max (a, b, fpst);
+}
+
 #define VFP_HELPER(name, p) HELPER(glue(glue(vfp_,name),p))
 
 #define VFP_BINOP(name) \
@@ -3274,6 +3316,10 @@ VFP_BINOP(add)
 VFP_BINOP(sub)
 VFP_BINOP(mul)
 VFP_BINOP(div)
+VFP_BINOP(min)
+VFP_BINOP(max)
+VFP_BINOP(minnm)
+VFP_BINOP(maxnm)
 #undef VFP_BINOP
 
 float32 VFP_HELPER(neg, s)(float32 a)

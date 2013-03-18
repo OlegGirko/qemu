@@ -2123,6 +2123,18 @@ static void handle_fpdp2s64(DisasContext *s, uint32_t insn)
     case 0x3: /* FSUB */
         gen_helper_vfp_subd(tcg_res, tcg_op1, tcg_op2, fpst);
         break;
+    case 0x4: /* FMAX */
+	gen_helper_vfp_maxd(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x5: /* FMIN */
+	gen_helper_vfp_mind(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x6: /* FMAXNM */
+	gen_helper_vfp_maxnmd(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x7: /* FMINNM */
+	gen_helper_vfp_minnmd(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
     default:
         unallocated_encoding(s);
         return;
@@ -2175,6 +2187,18 @@ static void handle_fpdp2s32(DisasContext *s, uint32_t insn)
     case 0x3: /* FSUB */
         gen_helper_vfp_subs(tcg_res, tcg_op1, tcg_op2, fpst);
         break;
+    case 0x4: /* FMAX */
+	gen_helper_vfp_maxs(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x5: /* FMIN */
+	gen_helper_vfp_mins(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x6: /* FMAXNM */
+	gen_helper_vfp_maxnms(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x7: /* FMINNM */
+	gen_helper_vfp_minnms(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
     default:
         unallocated_encoding(s);
         return;
