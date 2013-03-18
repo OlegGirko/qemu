@@ -616,8 +616,14 @@ typedef struct {
 #endif
 #endif
 
+#ifdef TARGET_ARM64
+#define TARGET_SI_PREAMBLE_SIZE 4
+#endif
+#ifndef TARGET_SI_PREAMBLE_SIZE
+#define TARGET_SI_PREAMBLE_SIZE 3
+#endif
 #define TARGET_SI_MAX_SIZE	128
-#define TARGET_SI_PAD_SIZE	((TARGET_SI_MAX_SIZE/sizeof(int)) - 3)
+#define TARGET_SI_PAD_SIZE	((TARGET_SI_MAX_SIZE/sizeof(int)) - TARGET_SI_PREAMBLE_SIZE)
 
 typedef struct target_siginfo {
 #ifdef TARGET_MIPS
