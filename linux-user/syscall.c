@@ -4888,7 +4888,7 @@ static int do_futex(target_ulong uaddr, int op, int val, target_ulong timeout,
         return get_errno(sys_futex(g2h(uaddr), op, tswap32(val),
                          pts, NULL, val3));
     case FUTEX_WAKE:
-        return get_errno(sys_futex(g2h(uaddr), op, val, NULL, NULL, 0));
+        return get_errno(sys_futex(g2h(uaddr), op, tswap32(val), NULL, NULL, 0));
     case FUTEX_FD:
         return get_errno(sys_futex(g2h(uaddr), op, val, NULL, NULL, 0));
     case FUTEX_REQUEUE:
@@ -4905,6 +4905,15 @@ static int do_futex(target_ulong uaddr, int op, int val, target_ulong timeout,
                                    (base_op == FUTEX_CMP_REQUEUE
                                     ? tswap32(val3)
                                     : val3)));
+    case FUTEX_WAKE_BITSET:
+        if (timeout) {
+            pts = &ts;
+            target_to_host_timespec(pts, timeout);
+        } else {
+            pts = NULL;
+        }
+	return get_errno(sys_futex(g2h(uaddr), op, tswap32(val),
+				   pts, NULL, tswap32(val3)));
     default:
         return -TARGET_ENOSYS;
     }
