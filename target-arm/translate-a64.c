@@ -2767,7 +2767,7 @@ static void handle_simdmovi(DisasContext *s, uint32_t insn)
         break;
     }
 
-    if (is_neg) {
+    if (((cmode >> 1) & 7) != 7 && is_neg) {
         imm = ~imm;
     }
     tcg_imm = tcg_const_i64(imm);
