@@ -1160,10 +1160,17 @@ static void handle_literal(DisasContext *s, uint32_t insn)
         size = 3;
         break;
     case 2:
-        is_signed = true;
-        size = 2;
+	if (!is_vector) {
+	    is_signed = true;
+	    size = 2;
+	} else
+	  size = 4;
         break;
     case 3:
+	if (is_vector) {
+	    unallocated_encoding(s);
+	    return;
+	}
         /* prefetch */
         goto out;
     }
