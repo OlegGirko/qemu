@@ -157,7 +157,7 @@ static int get_bits(uint32_t inst, int start, int len)
     return (inst >> start) & ((1 << len) - 1);
 }
 
-uint64_t HELPER(cinc)(uint32_t pstate, uint32_t insn, uint64_t n, uint64_t m)
+uint64_t HELPER(csel)(uint32_t pstate, uint32_t insn, uint64_t n, uint64_t m)
 {
     bool else_inc = get_bits(insn, 10, 1);
     int cond = get_bits(insn, 12, 4);
