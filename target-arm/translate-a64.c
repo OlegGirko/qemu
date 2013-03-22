@@ -1553,9 +1553,13 @@ static void handle_dp1s(DisasContext *s, uint32_t insn)
     case 0x5: /* CLS */
 	{
 	  TCGv_i64 tcg_val = tcg_temp_new_i64();
+	  int reduce = 0;
 
 	  if (is_32bit) {
-	      tcg_gen_ext32u_i64(tcg_val, cpu_reg(rn));
+	      if (opcode == 0x4)
+		tcg_gen_ext32u_i64(tcg_val, cpu_reg(rn));
+	      else
+		tcg_gen_ext32s_i64(tcg_val, cpu_reg(rn));
 	  } else {
 	      tcg_gen_mov_i64(tcg_val, cpu_reg(rn));
 	  }
@@ -1563,15 +1567,22 @@ static void handle_dp1s(DisasContext *s, uint32_t insn)
 	  if (opcode == 0x4) {
 	      gen_helper_clz64(cpu_reg(rd), tcg_val);
 	      if (is_32bit) {
-		  tcg_gen_subi_i64(cpu_reg(rd), cpu_reg(rd), 32);
+		  reduce = 32;
 	      }
 	  } else {
-	      /* XXX to be implemented */
-	      unallocated_encoding(s);
-	      return;
+	      /* cls == clz(V ^ V>>1)-1, V being signed */
+	      tcg_gen_sari_i64 (cpu_reg(rd), tcg_val, 1);
+	      tcg_gen_xor_i64 (tcg_val, cpu_reg(rd), tcg_val);
+	      gen_helper_clz64 (cpu_reg(rd), tcg_val);
+	      if (is_32bit)
+		reduce = 33;
+	      else
+		reduce = 1;
 	  }
-
 	  tcg_temp_free_i64(tcg_val);
+
+	  if (reduce)
+	    tcg_gen_subi_i64(cpu_reg(rd), cpu_reg(rd), reduce);
 	}
     }
 
