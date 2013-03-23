@@ -1490,7 +1490,24 @@ static void handle_svc(DisasContext *s, uint32_t insn)
 
 static void handle_ccmp(DisasContext *s, uint32_t insn)
 {
-  unallocated_encoding(s);
+    int rn = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 5);
+    TCGv_i32 tcg_insn = tcg_const_i32(insn);
+
+    if (get_bits(insn, 4, 1) || get_bits(insn, 10, 1) || !get_bits(insn, 29, 1)) {
+	unallocated_encoding(s);
+	return;
+    }
+
+    if (get_bits(insn, 11, 1)) {
+	TCGv_i64 imm = tcg_const_i64(rm);
+	gen_helper_ccmp(pstate, pstate, tcg_insn, cpu_reg(rn), imm);
+	tcg_temp_free_i64(imm);
+    } else {
+	gen_helper_ccmp(pstate, pstate, tcg_insn, cpu_reg(rn), cpu_reg(rm));
+    }
+
+    tcg_temp_free_i32(tcg_insn);
 }
 
 /* Conditional select, CSEL, CS{INC,INV,NEG} */
