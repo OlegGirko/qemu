@@ -398,6 +398,11 @@ static void handle_mrs(DisasContext *s, uint32_t insn)
         /* CTR_EL0 [3:0] contains log2 of icache line size in words.
            CTR_EL0 [19:16] contains log2 of dcache line size in words.  */
         tcg_gen_movi_i64(cpu_reg(dest), 0x30003);
+    } else if (op0 == 3 && op1 == 3 && op2 == 7 && crm == 0 && crn == 0) {
+	/* dczid_el0 */
+	/* [3:0] contain log2(blocksize cleared by "dc zva" instruction)
+	   [4] is tested by glibc, and if set dc zva isn't used. */
+	tcg_gen_movi_i64(cpu_reg(dest), 0x10);
     } else {
         fprintf(stderr, "MRS: %d %d %d %d %d\n", op0, op1, op2, crm, crn);
         unallocated_encoding(s);
@@ -408,6 +413,12 @@ static void handle_sys(DisasContext *s, uint32_t insn)
 {
     /* XXX simply ignore sys for now, need to start worrying when we implement
            system emulation */
+    /* XXX Some sys insns can also be done in userspace, e.g. 'dc zva',
+       which clears memory (part of the data-cache sys ops).  */
+    if ((insn & ~0xf) == 0xd50b7420) {
+	unallocated_encoding(s);
+	return;
+    }
 }
 
 /* PC relative address calculation */
