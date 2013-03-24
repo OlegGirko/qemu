@@ -2644,8 +2644,8 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     }
 
     for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
-        simd_ld(tcg_op1, freg_offs_n + i, size, is_u);
-        simd_ld(tcg_op2, freg_offs_m + i, size, is_u);
+        simd_ld(tcg_op1, freg_offs_n + i, size, !is_u);
+        simd_ld(tcg_op2, freg_offs_m + i, size, !is_u);
 
         switch (opcode) {
         case 0x10: /* ADD / SUB */
@@ -2759,9 +2759,9 @@ static void handle_simd_accross(DisasContext *s, uint32_t insn)
        the Reduce pseudoop that uses divide and conquer on the two halfs
        of the input.  The integer ones user linear iteration over the
        vec elements.  Both should be equivalent.  */
-    simd_ld(tcg_res, freg_offs_n + 0, size, is_u);
+    simd_ld(tcg_res, freg_offs_n + 0, size, !is_u);
     for (i = ebytes; i < (is_q ? 16 : 8); i += ebytes) {
-        simd_ld(tcg_op1, freg_offs_n + i, size, is_u);
+        simd_ld(tcg_op1, freg_offs_n + i, size, !is_u);
 
         switch (opcode) {
 	case 0x03: /* SADDLV / UADDLV */
@@ -2832,6 +2832,7 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
     int rn = get_bits(insn, 5, 5);
     int size = get_bits(insn, 22, 2);
     int opcode = get_bits(insn, 12, 5);
+    bool is_u = get_bits(insn, 29, 1);
     bool is_q = get_bits(insn, 30, 1);
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
@@ -2854,6 +2855,30 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
 	}
 	simd_st(tcg_res, freg_offs_d + (is_q ? sizeof(float64) : 0), 3);
 	break;
+    case 0x0f: /* FABS / FNEG */
+	size = (size & 1) + 2;
+	ebytes = 1 << size;
+	for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
+	    /* XXX For 32bit this creates a zero extended 64bit value,
+	       i.e. the float in the low bits.  The helpers are supposed
+	       to use TCGv_i32, and we give them this zero-extended TCGv_i64.
+	       This seems to work just fine, but is it guaranteed?  */
+	    simd_ld(tcg_op1, freg_offs_n + i, size, false);
+	    if (is_u) {
+		if (ebytes == 4)
+		  gen_helper_vfp_negs(tcg_res, tcg_op1);
+		else
+		  gen_helper_vfp_negd(tcg_res, tcg_op1);
+	    } else {
+		if (ebytes == 4)
+		  gen_helper_vfp_abss(tcg_res, tcg_op1);
+		else
+		  gen_helper_vfp_absd(tcg_res, tcg_op1);
+	    }
+	    simd_st(tcg_res, freg_offs_d + i, size);
+	}
+	break;
+
     default:
 	unallocated_encoding(s);
 	return;
