@@ -2615,6 +2615,9 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     int opcode = get_bits(insn, 11, 5);
     bool is_q = get_bits(insn, 30, 1);
     bool is_u = get_bits(insn, 29, 1);
+    bool is_pair = is_u;
+    bool is_float = false;
+    bool is_op2 = false;
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
     int freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
@@ -2623,6 +2626,22 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     TCGv_i64 tcg_res = tcg_temp_new_i64();
     int ebytes = (1 << size);
     int i;
+
+    switch (opcode) {
+	       /* base / pair  / sz&2 / sz&2 && pair */
+    case 0x1a: /* FADD / FADDP / FSUB / FABD */
+	is_float = true;
+	is_op2 = size & 2;
+	size = (size & 1) + 2;
+	ebytes = (1 << size);
+	is_u = true;
+	if (is_pair) {
+	    /* XXX Can't yet handle.  */
+	    unallocated_encoding(s);
+	    return;
+	}
+	break;
+    }
 
     for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
         simd_ld(tcg_op1, freg_offs_n + i, size, is_u);
@@ -2670,6 +2689,34 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 	    /* Convert 1/0 into 0/all-ones.  */
 	    tcg_gen_subi_i64 (tcg_res, tcg_res, 1);
 	    break;
+
+	case 0x1a: /* FADD / FADDP / FSUB / FABD */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+
+	      if (size == 2) {
+		  tcg_gen_trunc_i64_i32(tcg_op1, tcg_op1);
+		  tcg_gen_trunc_i64_i32(tcg_op2, tcg_op2);
+	      }
+
+	      switch (is_op2 << 8 | opcode) {
+	      case 0x01a: /* FADD */
+		  if (size == 2)
+		    gen_helper_vfp_adds(tcg_res, tcg_op1, tcg_op2, fpst);
+		  else
+		    gen_helper_vfp_addd(tcg_res, tcg_op1, tcg_op2, fpst);
+		  break;
+	      case 0x110: /* FSUB */
+		  if (size == 2)
+		    gen_helper_vfp_subs(tcg_res, tcg_op1, tcg_op2, fpst);
+		  else
+		    gen_helper_vfp_subd(tcg_res, tcg_op1, tcg_op2, fpst);
+		  break;
+	      }
+
+	      tcg_temp_free_ptr(fpst);
+	      break;
+	    }
 
         default:
             unallocated_encoding(s);
