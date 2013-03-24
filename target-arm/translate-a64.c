@@ -2646,6 +2646,31 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 				 tcg_res,
 				 tcg_op1, tcg_op2, tcg_op1, tcg_op2);
 	    break;
+	case 0x06: /* CMGT / CMHI */
+	    /* setcond results in 1/0, which we transform to 0/all-ones,
+	       the latter being true, so we need to inverse the condition
+	       for the test.  GT->LE.  */
+	    tcg_gen_setcond_i64 (is_u ? TCG_COND_LEU : TCG_COND_LE,
+				 tcg_res, tcg_op1, tcg_op2);
+	    goto expand_ones;
+	case 0x07: /* CMGE / CMHS */
+	    tcg_gen_setcond_i64 (is_u ? TCG_COND_LTU : TCG_COND_LT,
+				 tcg_res, tcg_op1, tcg_op2);
+	    goto expand_ones;
+	case 0x11: /* CMTST / CMEQ */
+	    if (is_u) { /* CMEQ */
+		tcg_gen_setcond_i64 (TCG_COND_NE, tcg_res, tcg_op1, tcg_op2);
+	    } else {
+		/* We sign-extended the elements above, that's okay here.  */
+		tcg_gen_and_i64 (tcg_res, tcg_op1, tcg_op2);
+		tcg_gen_setcondi_i64 (TCG_COND_EQ, tcg_res, tcg_res, 0);
+	    }
+	    goto expand_ones;
+        expand_ones:
+	    /* Convert 1/0 into 0/all-ones.  */
+	    tcg_gen_subi_i64 (tcg_res, tcg_res, 1);
+	    break;
+
         default:
             unallocated_encoding(s);
             return;
