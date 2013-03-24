@@ -596,25 +596,49 @@ static TCGv_i64 get_shift(int reg, int shift_type, TCGv_i64 tcg_shift,
     r = tcg_temp_new_i64();
 
     /* XXX carry_out */
+    /* Careful with the width.  We work on 64bit, but must make sure
+       that we zero-extend the result on out, and ignore any upper bits,
+       that might still be set in that register.  */
     switch (shift_type) {
     case 0: /* LSL */
+	/* left shift is easy, simply zero-extend on out */
         tcg_gen_shl_i64(r, cpu_reg(reg), tcg_shift);
+	if (is_32bit)
+	  tcg_gen_ext32u_i64 (r, r);
         break;
     case 1: /* LSR */
-        tcg_gen_shr_i64(r, cpu_reg(reg), tcg_shift);
+	/* For logical right shift we zero extend first, to zero
+	   the upper bits.  We don't need to extend on out.  */
+	if (is_32bit) {
+	    tcg_gen_ext32u_i64 (r, cpu_reg(reg));
+	    tcg_gen_shr_i64 (r, r, tcg_shift);
+	} else
+	  tcg_gen_shr_i64(r, cpu_reg(reg), tcg_shift);
         break;
     case 2: /* ASR */
+	/* For arithmetic right shift we sign extend first, then shift,
+	   and then need to clear the upper bits again.  */
         if (is_32bit) {
             TCGv_i64 tcg_tmp = tcg_temp_new_i64();
             tcg_gen_ext32s_i64(tcg_tmp, cpu_reg(reg));
             tcg_gen_sar_i64(r, tcg_tmp, tcg_shift);
+	    tcg_gen_ext32u_i64 (r, r);
             tcg_temp_free_i64(tcg_tmp);
         } else {
             tcg_gen_sar_i64(r, cpu_reg(reg), tcg_shift);
         }
         break;
-    case 3:
-        tcg_gen_rotr_i64(r, cpu_reg(reg), tcg_shift);
+    case 3: /* ROR */
+	/* For rotation extending doesn't help, we really have to use
+	   a 32bit rotate.  */
+	if (is_32bit) {
+	    TCGv_i32 tmp = tcg_temp_new_i32();
+            tcg_gen_trunc_i64_i32(tmp, cpu_reg(reg));
+	    tcg_gen_rotr_i32(tmp, tmp, tcg_shift);
+            tcg_gen_extu_i32_i64(r, tmp);
+            tcg_temp_free_i32(tmp);
+	} else
+	  tcg_gen_rotr_i64(r, cpu_reg(reg), tcg_shift);
         break;
     }
 
