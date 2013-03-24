@@ -652,7 +652,10 @@ static TCGv_i64 get_shifti(int reg, int shift_type, int shift, int is_32bit)
 
     if (!shift) {
         r = tcg_temp_new_i64();
-        tcg_gen_mov_i64(r, cpu_reg(reg));
+	if (is_32bit)
+	  tcg_gen_ext32u_i64 (r, cpu_reg(reg));
+	else
+	  tcg_gen_mov_i64(r, cpu_reg(reg));
         return r;
     }
 
@@ -816,13 +819,14 @@ static void handle_add(DisasContext *s, uint32_t insn)
     tcg_gen_mov_i64(tcg_src, cpu_reg(source));
     tcg_dst = cpu_reg(dest);
     if (extend) {
-        extend_type = get_bits(insn, 13, 3);
-        if ((shift_amount & 0x7) > 4) {
+        extend_type = (shift_amount >> 3) & 0x7;
+	shift_amount &= 7;
+        if (shift_amount > 4) {
             /* reserved value */
             unallocated_encoding(s);
         }
+	tcg_gen_mov_i64(tcg_src, cpu_reg_sp(source));
         if (!setflags) {
-            tcg_gen_mov_i64(tcg_src, cpu_reg_sp(source));
             tcg_dst = cpu_reg_sp(dest);
         }
     } else {
@@ -838,7 +842,7 @@ static void handle_add(DisasContext *s, uint32_t insn)
 
     if (extend) {
         tcg_op2 = tcg_temp_new_i64();
-        reg_extend(tcg_op2, shift_amount >> 3, shift_amount & 0x7, rm);
+        reg_extend(tcg_op2, extend_type, shift_amount, rm);
     } else {
         tcg_op2 = get_shifti(rm, shift_type, shift_amount, is_32bit);
     }
@@ -1373,7 +1377,7 @@ static void handle_extr(DisasContext *s, uint32_t insn)
     } else {
         tcg_gen_mov_i64(tcg_tmp, cpu_reg(rm));
     }
-    tcg_gen_shri_i64(tcg_res, cpu_reg(rm), imms);
+    tcg_gen_shri_i64(tcg_res, tcg_tmp, imms);
     tcg_gen_shli_i64(tcg_tmp, cpu_reg(rn), bitsize - imms);
     tcg_gen_or_i64(cpu_reg(rd), tcg_tmp, tcg_res);
     if (is_32bit) {
