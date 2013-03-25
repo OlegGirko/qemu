@@ -1259,7 +1259,7 @@ static int target_restore_sigframe(CPUARMState *env,
     uint32_t magic, size;
 
     target_to_host_sigset(&set, &sf->uc.tuc_sigmask);
-    sigprocmask(SIG_SETMASK, &set, NULL);
+    do_sigprocmask(SIG_SETMASK, &set, NULL);
 
     for (i = 0; i < 31; i++) {
         err |= __get_user(env->xregs[i], &sf->uc.tuc_mcontext.regs[i]);
@@ -5798,6 +5798,7 @@ void process_pending_signals(CPUArchState *cpu_env)
             sigaddset(&set, target_to_host_signal(sig));
 
         /* block signals in the handler using Linux */
+        sigdelset(&set, SIGSEGV);
         sigprocmask(SIG_BLOCK, &set, &old_set);
         /* save the previous blocked signal state to restore it at the
            end of the signal execution (see do_sigreturn) */
