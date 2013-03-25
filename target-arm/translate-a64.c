@@ -43,6 +43,14 @@ static TCGv_i64 cpu_pc;
 static TCGv_i64 cpu_sp;
 static TCGv_i32 pstate;
 
+static TCGv_i64 cpu_exclusive_addr;
+static TCGv_i64 cpu_exclusive_val;
+static TCGv_i64 cpu_exclusive_high;
+#ifdef CONFIG_USER_ONLY
+static TCGv_i64 cpu_exclusive_test;
+static TCGv_i64 cpu_exclusive_info;
+#endif
+
 static const char *regnames[] =
     { "x0", "x1", "x2", "x3", "x4", "x5", "x6", "x7",
       "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15",
@@ -69,6 +77,19 @@ void a64_translate_init(void)
     pstate = tcg_global_mem_new_i32(TCG_AREG0,
                                     offsetof(CPUARMState, pstate),
                                     "pstate");
+
+    cpu_exclusive_addr = tcg_global_mem_new_i64(TCG_AREG0,
+        offsetof(CPUARMState, exclusive_addr), "exclusive_addr");
+    cpu_exclusive_val = tcg_global_mem_new_i64(TCG_AREG0,
+        offsetof(CPUARMState, exclusive_val), "exclusive_val");
+    cpu_exclusive_high = tcg_global_mem_new_i64(TCG_AREG0,
+        offsetof(CPUARMState, exclusive_high), "exclusive_high");
+#ifdef CONFIG_USER_ONLY
+    cpu_exclusive_test = tcg_global_mem_new_i64(TCG_AREG0,
+        offsetof(CPUARMState, exclusive_test), "exclusive_test");
+    cpu_exclusive_info = tcg_global_mem_new_i64(TCG_AREG0,
+        offsetof(CPUARMState, exclusive_info), "exclusive_info");
+#endif
 }
 
 void cpu_dump_state_a64(CPUARMState *env, FILE *f, fprintf_function cpu_fprintf,
@@ -411,6 +432,12 @@ static void handle_mrs(DisasContext *s, uint32_t insn)
 
 static void handle_sys(DisasContext *s, uint32_t insn)
 {
+    int rt = get_reg(insn);
+    int op2 = get_bits(insn, 5, 3);
+    int crn = get_bits(insn, 12, 4);
+    int op1 = get_bits(insn, 16, 3);
+    int op0 = get_bits(insn, 19, 2);
+    bool is_l = get_bits(insn, 21, 1);
     /* XXX simply ignore sys for now, need to start worrying when we implement
            system emulation */
     /* XXX Some sys insns can also be done in userspace, e.g. 'dc zva',
@@ -418,6 +445,10 @@ static void handle_sys(DisasContext *s, uint32_t insn)
     if ((insn & ~0xf) == 0xd50b7420) {
 	unallocated_encoding(s);
 	return;
+    }
+    if (op1 == 3 && crn == 3 && !is_l && op0 == 0 && op2 == 2 && rt == 31) {
+	/* CLREX */
+	tcg_gen_movi_i64(cpu_exclusive_addr, -1);
     }
 }
 
@@ -1099,6 +1130,67 @@ static void handle_stp(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_addr);
 }
 
+/* Load/Store exclusive instructions are implemented by remembering
+   the value/address loaded, and seeing if these are the same
+   when the store is performed. This should be sufficient to implement
+   the architecturally mandated semantics, and avoids having to monitor
+   regular stores.
+
+   In system emulation mode only one CPU will be running at once, so
+   this sequence is effectively atomic.  In user emulation mode we
+   throw an exception and handle the atomic operation elsewhere.  */
+static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
+                               TCGv_i64 addr, int size, bool is_pair)
+{
+    TCGv_i64 tmp = tcg_temp_new_i64();
+
+    switch (size) {
+    case 0:
+	tcg_gen_qemu_ld8u(tmp, addr, get_mem_index(s));
+        break;
+    case 1:
+	tcg_gen_qemu_ld16u(tmp, addr, get_mem_index(s));
+        break;
+    case 2:
+	tcg_gen_qemu_ld32u(tmp, addr, get_mem_index(s));
+	break;
+    case 3:
+	tcg_gen_qemu_ld64(tmp, addr, get_mem_index(s));
+        break;
+    default:
+        abort();
+    }
+    tcg_gen_mov_i64(cpu_exclusive_val, tmp);
+    tcg_gen_mov_i64(cpu_reg(rt), tmp);
+    if (is_pair) {
+	TCGv_i64 addr2 = tcg_temp_new_i64();
+        tcg_gen_addi_i32(addr2, addr, 1 << size);
+	if (size == 2)
+	  tcg_gen_qemu_ld32u(tmp, addr2, get_mem_index(s));
+	else
+	  tcg_gen_qemu_ld64(tmp, addr2, get_mem_index(s));
+	tcg_temp_free_i64(addr2);
+        tcg_gen_mov_i64(cpu_exclusive_high, tmp);
+	tcg_gen_mov_i64(cpu_reg(rt2), tmp);
+    }
+
+    tcg_temp_free_i64(tmp);
+    tcg_gen_mov_i64(cpu_exclusive_addr, addr);
+}
+
+#ifdef CONFIG_USER_ONLY
+static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
+                                TCGv_i64 addr, int size, int is_pair)
+{
+    tcg_gen_mov_i64(cpu_exclusive_test, addr);
+    tcg_gen_movi_i64(cpu_exclusive_info,
+                     size | is_pair << 2 | (rd << 4) | (rt << 9) | (rt2 << 14));
+    gen_exception_insn(s, 4, EXCP_STREX);
+}
+#else
+#error implement gen_store_exclusive for system mode (see target-arm/translate.c)
+#endif
+
 static void handle_ldarx(DisasContext *s, uint32_t insn)
 {
     int rt = get_reg(insn);
@@ -1121,15 +1213,19 @@ static void handle_ldarx(DisasContext *s, uint32_t insn)
     if (is_atomic) {
         /* XXX add locking */
     }
-    if (is_store && is_excl) {
-        // XXX find what status it wants
-        tcg_gen_movi_i64(cpu_reg(rs), 0);
-    }
 
-    ldst_do_gpr(s, rt, tcg_addr, size, is_store, false);
-    if (is_pair) {
-        tcg_gen_addi_i64(tcg_addr, tcg_addr, 1 << size);
-        ldst_do_gpr(s, rt2, tcg_addr, size, is_store, false);
+    if (is_excl) {
+	if (!is_store) {
+	    gen_load_exclusive (s, rt, rt2, tcg_addr, size, is_pair);
+	} else {
+	    gen_store_exclusive (s, rs, rt, rt2, tcg_addr, size, is_pair);
+	}
+    } else {
+	ldst_do_gpr(s, rt, tcg_addr, size, is_store, false);
+	if (is_pair) {
+	    tcg_gen_addi_i64(tcg_addr, tcg_addr, 1 << size);
+	    ldst_do_gpr(s, rt2, tcg_addr, size, is_store, false);
+	}
     }
 
     tcg_temp_free_i64(tcg_addr);
