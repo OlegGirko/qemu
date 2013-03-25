@@ -3343,7 +3343,7 @@ static void handle_dupg(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
-    int imm5 = get_bits(insn, 16, 6);
+    int imm5 = get_bits(insn, 16, 5);
     int q = get_bits(insn, 30, 1);
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int size;
@@ -3386,82 +3386,76 @@ static void handle_dupg(DisasContext *s, uint32_t insn)
     }
 }
 
-static void handle_umov(DisasContext *s, uint32_t insn)
+static void handle_umov_smov(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
-    int imm5 = get_bits(insn, 16, 6);
+    int imm5 = get_bits(insn, 16, 5);
+    bool is_signed = get_bits(insn, 11, 4) == 0x5;
     int q = get_bits(insn, 30, 1);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
     int size;
-    int idx;
 
-    for (size = 0; !(imm5 & (1 << size)); size++) {
-        if (size > 3) {
-            unallocated_encoding(s);
-            return;
-        }
+    size = ctz32(imm5);
+    if (size > 3 || (size > 2 && is_signed)) {
+	unallocated_encoding(s);
+	return;
     }
-
     if ((size == 3) && !q) {
         /* XXX reserved value */
         unallocated_encoding(s);
     }
 
-    switch (size) {
-    case 0:
-        idx = get_bits(imm5, 1, 4) << 0;
-        tcg_gen_ld8u_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
-        break;
-    case 1:
-        idx = get_bits(imm5, 2, 3) << 1;
-        tcg_gen_ld16u_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
-        break;
-    case 2:
-        idx = get_bits(imm5, 3, 2) << 2;
-        tcg_gen_ld32u_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
-        break;
-    case 3:
-        idx = get_bits(imm5, 4, 1) << 3;
-        tcg_gen_ld_i64(cpu_reg(rd), cpu_env, freg_offs_n + idx);
-        break;
+    simd_ld(cpu_reg(rd),
+	    freg_offs_n + (get_bits(imm5, 1+size, 4-size) << size),
+	    size, is_signed);
+}
+
+static void handle_ins_elem(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int imm4 = get_bits(insn, 11, 4);
+    int imm5 = get_bits(insn, 16, 5);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int size;
+    int src_index, dst_index;
+    TCGv_i64 tmp;
+
+    size = ctz32(imm5);
+    if (size > 3) {
+	unallocated_encoding(s);
+	return;
     }
+    dst_index = get_bits(imm5, 1+size, 4-size);
+    src_index = get_bits(imm4, size, 4-size);
+
+    tmp = tcg_temp_new_i64();
+
+    simd_ld(tmp, freg_offs_n + (src_index << size), size, false);
+    simd_st(tmp, freg_offs_d + (dst_index << size), size);
+
+    tcg_temp_free_i64(tmp);
 }
 
 static void handle_insg(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
-    int imm5 = get_bits(insn, 16, 6);
+    int imm5 = get_bits(insn, 16, 5);
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int size;
-    int idx;
 
-    for (size = 0; !(imm5 & (1 << size)); size++) {
-        if (size > 3) {
-            unallocated_encoding(s);
-            return;
-        }
+    size = ctz32(imm5);
+    if (size > 3) {
+	unallocated_encoding(s);
+	return;
     }
 
-    switch (size) {
-    case 0:
-        idx = get_bits(imm5, 1, 4) << 0;
-        tcg_gen_st8_i64(cpu_reg(rn), cpu_env, freg_offs_d + idx);
-        break;
-    case 1:
-        idx = get_bits(imm5, 2, 3) << 1;
-        tcg_gen_st16_i64(cpu_reg(rn), cpu_env, freg_offs_d + idx);
-        break;
-    case 2:
-        idx = get_bits(imm5, 3, 2) << 2;
-        tcg_gen_st32_i64(cpu_reg(rn), cpu_env, freg_offs_d + idx);
-        break;
-    case 3:
-        idx = get_bits(imm5, 4, 1) << 3;
-        tcg_gen_st_i64(cpu_reg(rn), cpu_env, freg_offs_d + idx);
-        break;
-    }
+    simd_st(cpu_reg(rn),
+	    freg_offs_d + (get_bits(imm5, 1+size, 4-size) << size),
+	    size);
 }
 
 void disas_a64_insn(CPUARMState *env, DisasContext *s)
@@ -3531,25 +3525,42 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         }
         break;
     case 0x0e:
-        if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
-            (get_bits(insn, 10, 6) == 0x3)) {
-            handle_dupg(s, insn);
-        } else if (!get_bits(insn, 31, 1) && !get_bits(insn, 29, 1) &&
-            (get_bits(insn, 10, 6) == 0xf)) {
-            handle_umov(s, insn);
-        } else if ((get_bits(insn, 29, 3) == 2) && !get_bits(insn, 21, 3) &&
-            (get_bits(insn, 10, 6) == 0x7)) {
-            handle_insg(s, insn);
-        } else if (!get_bits(insn, 31, 1) && get_bits(insn, 21, 1) &&
+	if (get_bits(insn, 31, 1))
+	  goto unknown_insn;
+	if (!get_bits(insn, 21, 3)) {
+	    if (get_bits(insn, 15, 1) || !get_bits(insn, 10, 1))
+	      goto unknown_insn;
+	    /* AdvSIMD copy.  */
+	    if (get_bits(insn, 29, 2) == 3) /* INS element */
+	      handle_ins_elem(s, insn);
+	    else if (get_bits(insn, 29, 2) == 1) { /* unalloc */
+		goto unknown_insn;
+	    }
+	    switch (get_bits(insn, 11, 4)) {
+	    case 0x1: /* DUP general reg */
+		handle_dupg(s, insn);
+		break;
+	    case 0x7: /* UMOV */
+	    case 0x5: /* SMOV */
+		handle_umov_smov(s, insn);
+		break;
+	    case 0x3: /* INS general reg */
+		handle_insg(s, insn);
+		break;
+	    case 0x0: /* DUP element */
+	    default:
+		goto unknown_insn;
+	    }
+        } else if (get_bits(insn, 21, 1) &&
                    get_bits(insn, 10, 1)) {
 	    if (get_bits(insn, 11, 5) == 0x3)
 	      handle_simdorr(s, insn);
 	    else
 	      handle_simd3su0(s, insn);
-	} else if (!get_bits(insn, 31, 1) && get_bits(insn, 17, 5) == 0x18 &&
+	} else if (get_bits(insn, 17, 5) == 0x18 &&
 		   get_bits(insn, 11, 1) && !get_bits(insn, 10, 1)) {
 	    handle_simd_accross(s, insn);
-	} else if (!get_bits(insn, 31, 1) && get_bits(insn, 17, 5) == 0x10 &&
+	} else if (get_bits(insn, 17, 5) == 0x10 &&
 		   get_bits(insn, 11, 1) && !get_bits(insn, 10, 1)) {
 	    handle_simd_misc(s, insn);
         } else {
