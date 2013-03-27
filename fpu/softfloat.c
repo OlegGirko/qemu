@@ -6585,37 +6585,56 @@ uint_fast16_t float64_to_uint16_round_to_zero(float64 a STATUS_PARAM)
     return res;
 }
 
-/* FIXME: This looks broken.  */
 uint64_t float64_to_uint64 (float64 a STATUS_PARAM)
 {
-    int64_t v;
+    flag aSign;
+    int_fast16_t aExp;
+    uint64_t res;
 
-    v = float64_val(int64_to_float64(INT64_MIN STATUS_VAR));
-    v += float64_val(a);
-    v = float64_to_int64(make_float64(v) STATUS_VAR);
+    aExp = extractFloat64Exp( a );
+    aSign = extractFloat64Sign( a );
 
-    return v - INT64_MIN;
+    if (aSign) {
+	res = 0;
+	float_raise( float_flag_invalid STATUS_VAR);
+    } else {
+	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
+	   so half the value, convert to int, and double it again.  */
+	if (aExp == 0x43e)
+	  a = packFloat64( 0, aExp - 1, extractFloat64Frac( a ) );
+
+	res = float64_to_int64(a STATUS_VAR);
+	if (aExp == 0x43e)
+	  res <<= 1;
+    }
+
+    return res;
 }
 
 uint64_t float64_to_uint64_round_to_zero (float64 a STATUS_PARAM)
 {
-    int64_t v;
+    flag aSign;
+    int_fast16_t aExp;
+    uint64_t res;
 
-    v = float64_val(a);
-    if (v > int64_to_float64(INT64_MIN STATUS_VAR)) {
-        /* XXX */
-        assert(0);
+    aExp = extractFloat64Exp( a );
+    aSign = extractFloat64Sign( a );
+
+    if (aSign) {
+	res = 0;
+	float_raise( float_flag_invalid STATUS_VAR);
+    } else {
+	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
+	   so half the value, convert to int, and double it again.  */
+	if (aExp == 0x43e)
+	  a = packFloat64( 0, aExp - 1, extractFloat64Frac( a ) );
+
+	res = float64_to_int64_round_to_zero(a STATUS_VAR);
+	if (aExp == 0x43e)
+	  res <<= 1;
     }
-    return float64_to_int64_round_to_zero(a STATUS_VAR);
-#if 0
-    int64_t v;
 
-    v = float64_val(int64_to_float64(INT64_MIN STATUS_VAR));
-    v += float64_val(a);
-    v = float64_to_int64_round_to_zero(make_float64(v) STATUS_VAR);
-
-    return v - INT64_MIN;
-#endif
+    return res;
 }
 
 #define COMPARE(s, nan_exp)                                                  \
