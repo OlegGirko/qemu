@@ -75,6 +75,9 @@ int __clone2(int (*fn)(void *), void *child_stack_base,
 #ifdef CONFIG_SIGNALFD
 #include <sys/signalfd.h>
 #endif
+#ifdef CONFIG_TIMERFD
+#include <sys/timerfd.h>
+#endif
 #ifdef CONFIG_EPOLL
 #include <sys/epoll.h>
 #endif
@@ -9119,6 +9122,49 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         break;
 #endif
 #endif /* CONFIG_SIGNALFD */
+#if defined(CONFIG_TIMERFD)
+#if defined(TARGET_NR_timerfd_create)
+    case TARGET_NR_timerfd_create:
+        ret = get_errno(timerfd_create(arg1, target_to_host_bitmask(arg2, fcntl_flags_tbl)));
+        break;
+#endif
+#if defined(TARGET_NR_timerfd_settime)
+    case TARGET_NR_timerfd_settime:
+    {
+        struct itimerspec value, ovalue, *pvalue;
+        if (arg3) {
+            pvalue = &value;
+            ret = target_to_host_timespec(&pvalue->it_interval, arg3);
+            if (!ret)
+                ret = target_to_host_timespec(&pvalue->it_value, arg3 + sizeof(struct target_timespec));
+            if (ret)
+                break;
+        } else {
+            pvalue = NULL;
+        }
+        ret = get_errno(timerfd_settime(arg1, arg2, pvalue, arg4 ? &ovalue : NULL));
+        if (!is_error(ret) && arg4) {
+            ret = host_to_target_timespec(arg3, &ovalue.it_interval);
+            if (!ret)
+                ret = host_to_target_timespec(arg3 + sizeof(struct target_timespec), &ovalue.it_value);
+        }
+        break;
+    }
+#endif
+#if defined(TARGET_NR_timerfd_gettime)
+    case TARGET_NR_timerfd_gettime:
+    {
+        struct itimerspec ovalue;
+        ret = get_errno(timerfd_gettime(arg1, &ovalue));
+        if (!is_error(ret) && arg4) {
+            ret = host_to_target_timespec(arg2, &ovalue.it_interval);
+            if (!ret)
+                ret = host_to_target_timespec(arg2 + sizeof(struct target_timespec), &ovalue.it_value);
+        }
+        break;
+    }
+#endif
+#endif /* CONFIG_TIMERFD */
 #if defined(CONFIG_FALLOCATE) && defined(TARGET_NR_fallocate)
     case TARGET_NR_fallocate:
 #if TARGET_ABI_BITS == 32

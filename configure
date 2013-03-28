@@ -2753,6 +2753,22 @@ if compile_prog "" "" ; then
   signalfd=yes
 fi
 
+# check if timerfd API is supported
+timerfd="no"
+cat > $TMPC << EOF
+#include <sys/timerfd.h>
+int main(void)
+{
+    timerfd_create(CLOCK_REALTIME, TFD_CLOEXEC);
+    timerfd_settime(-1, 0, NULL, NULL);
+    return timerfd_gettime (-1, NULL);
+}
+EOF
+
+if compile_prog "" "" ; then
+  timerfd=yes
+fi
+
 # check for fallocate
 fallocate=no
 cat > $TMPC << EOF
@@ -3827,6 +3843,9 @@ if test "$eventfd" = "yes" ; then
 fi
 if test "$signalfd" = "yes" ; then
   echo "CONFIG_SIGNALFD=y" >> $config_host_mak
+fi
+if test "$timerfd" = "yes" ; then
+  echo "CONFIG_TIMERFD=y" >> $config_host_mak
 fi
 if test "$fallocate" = "yes" ; then
   echo "CONFIG_FALLOCATE=y" >> $config_host_mak
