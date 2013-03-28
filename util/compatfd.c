@@ -105,7 +105,7 @@ static int qemu_signalfd_compat(const sigset_t *mask)
 
 int qemu_signalfd(const sigset_t *mask)
 {
-#if defined(CONFIG_SIGNALFD)
+#if defined(CONFIG_SYS_SIGNALFD)
     int ret;
 
     ret = syscall(SYS_signalfd, -1, mask, _NSIG / 8);
@@ -120,7 +120,7 @@ int qemu_signalfd(const sigset_t *mask)
 
 bool qemu_signalfd_available(void)
 {
-#ifdef CONFIG_SIGNALFD
+#ifdef CONFIG_SYS_SIGNALFD
     sigset_t mask;
     int fd;
     bool ok;

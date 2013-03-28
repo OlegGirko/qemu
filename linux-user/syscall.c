@@ -72,6 +72,9 @@ int __clone2(int (*fn)(void *), void *child_stack_base,
 #ifdef CONFIG_EVENTFD
 #include <sys/eventfd.h>
 #endif
+#ifdef CONFIG_SIGNALFD
+#include <sys/signalfd.h>
+#endif
 #ifdef CONFIG_EPOLL
 #include <sys/epoll.h>
 #endif
@@ -5197,6 +5200,28 @@ static int do_open(void *cpu_env, const char *pathname, int flags, mode_t mode)
     return get_errno(open(path(pathname), flags, mode));
 }
 
+#if defined(CONFIG_SIGNALFD)
+#if defined(TARGET_NR_signalfd) || defined(TARGET_NR_signalfd4)
+static int do_signalfd(int fd, abi_ulong target_mask, size_t sizemask,
+                       int flags)
+{
+    abi_long ret;
+    sigset_t set;
+    void *p;
+
+    if (sizemask != sizeof(target_sigset_t))
+        return -TARGET_EINVAL;
+    if (!(p = lock_user(VERIFY_READ, target_mask, sizeof(target_sigset_t), 1)))
+        return -TARGET_EINVAL;
+    target_to_host_sigset(&set, p);
+    unlock_user(p, target_mask, 0);
+
+    ret = get_errno(signalfd(fd, &set, target_to_host_bitmask(flags, fcntl_flags_tbl)));
+    return ret;
+}
+#endif /* TARGET_NR_signalfd || TARGET_NR_signalfd4 */
+#endif /* CONFIG_SIGNALFD */
+
 /* resolve_dirfd_path - get the path relative to a dirfd
  *
  * return value:
@@ -9082,6 +9107,18 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
     }
 #endif
 #endif /* CONFIG_EVENTFD  */
+#if defined(CONFIG_SIGNALFD)
+#if defined(TARGET_NR_signalfd)
+    case TARGET_NR_signalfd:
+        ret = do_signalfd(arg1, arg2, arg3, 0);
+        break;
+#endif
+#if defined(TARGET_NR_signalfd4)
+    case TARGET_NR_signalfd4:
+        ret = do_signalfd(arg1, arg2, arg3, arg4);
+        break;
+#endif
+#endif /* CONFIG_SIGNALFD */
 #if defined(CONFIG_FALLOCATE) && defined(TARGET_NR_fallocate)
     case TARGET_NR_fallocate:
 #if TARGET_ABI_BITS == 32

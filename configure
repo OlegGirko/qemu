@@ -2712,7 +2712,7 @@ fi
 
 ##########################################
 # signalfd probe
-signalfd="no"
+sys_signalfd="no"
 cat > $TMPC << EOF
 #include <unistd.h>
 #include <sys/syscall.h>
@@ -2721,7 +2721,7 @@ int main(void) { return syscall(SYS_signalfd, -1, NULL, _NSIG / 8); }
 EOF
 
 if compile_prog "" "" ; then
-  signalfd=yes
+  sys_signalfd=yes
 fi
 
 # check if eventfd is supported
@@ -2736,6 +2736,21 @@ int main(void)
 EOF
 if compile_prog "" "" ; then
   eventfd=yes
+fi
+
+# check if signalfd is supported
+signalfd="no"
+cat > $TMPC << EOF
+#include <sys/signalfd.h>
+int main(void)
+{
+   sigset_t mask;
+   return signalfd (-1, &mask, 0);
+}
+EOF
+
+if compile_prog "" "" ; then
+  signalfd=yes
 fi
 
 # check for fallocate
@@ -3810,6 +3825,9 @@ fi
 if test "$eventfd" = "yes" ; then
   echo "CONFIG_EVENTFD=y" >> $config_host_mak
 fi
+if test "$signalfd" = "yes" ; then
+  echo "CONFIG_SIGNALFD=y" >> $config_host_mak
+fi
 if test "$fallocate" = "yes" ; then
   echo "CONFIG_FALLOCATE=y" >> $config_host_mak
 fi
@@ -3897,8 +3915,8 @@ fi
 if test "$fdt" = "yes" ; then
   echo "CONFIG_FDT=y" >> $config_host_mak
 fi
-if test "$signalfd" = "yes" ; then
-  echo "CONFIG_SIGNALFD=y" >> $config_host_mak
+if test "$sys_signalfd" = "yes" ; then
+  echo "CONFIG_SYS_SIGNALFD=y" >> $config_host_mak
 fi
 if test "$tcg_interpreter" = "yes" ; then
   echo "CONFIG_TCG_INTERPRETER=y" >> $config_host_mak
