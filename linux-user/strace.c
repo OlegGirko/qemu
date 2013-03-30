@@ -893,6 +893,14 @@ print_fcntl(const struct syscallname *name,
         gemu_log("F_SETOWN,");
         print_raw_param(TARGET_ABI_FMT_ld, arg2, 0);
         break;
+    case TARGET_F_GETOWN_EX:
+        gemu_log("F_GETOWN_EX,");
+        print_pointer(arg2, 1);
+        break;
+    case TARGET_F_SETOWN_EX:
+        gemu_log("F_SETOWN_EX,");
+        print_pointer(arg2, 1);
+        break;
     case TARGET_F_GETSIG:
         gemu_log("F_GETSIG");
         break;

@@ -2138,6 +2138,9 @@ struct target_statfs64 {
 #define TARGET_F_SETLKW64      14
 #endif
 
+#define TARGET_F_SETOWN_EX     15
+#define TARGET_F_GETOWN_EX     16
+
 #define TARGET_F_LINUX_SPECIFIC_BASE 1024
 #define TARGET_F_SETLEASE (TARGET_F_LINUX_SPECIFIC_BASE + 0)
 #define TARGET_F_GETLEASE (TARGET_F_LINUX_SPECIFIC_BASE + 1)
@@ -2293,6 +2296,11 @@ struct target_eabi_flock64 {
 	int  l_pid;
 } QEMU_PACKED;
 #endif
+
+struct target_f_owner_ex {
+	int type;
+	pid_t pid;
+};
 
 /* soundcard defines */
 /* XXX: convert them all to arch indepedent entries */

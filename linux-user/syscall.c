@@ -4464,6 +4464,10 @@ static int target_to_host_fcntl_cmd(int cmd)
 	    return F_GETSIG;
 	case TARGET_F_SETSIG:
 	    return F_SETSIG;
+	case TARGET_F_GETOWN_EX:
+	    return F_GETOWN_EX;
+	case TARGET_F_SETOWN_EX:
+	    return F_SETOWN_EX;
 #if TARGET_ABI_BITS == 32
         case TARGET_F_GETLK64:
 	    return F_GETLK64;
@@ -4504,6 +4508,8 @@ static abi_long do_fcntl(int fd, int cmd, abi_ulong arg)
     struct target_flock *target_fl;
     struct flock64 fl64;
     struct target_flock64 *target_fl64;
+    struct target_f_owner_ex *target_foex;
+    struct f_owner_ex foex;
     abi_long ret;
     int host_cmd = target_to_host_fcntl_cmd(cmd);
 
@@ -4605,6 +4611,28 @@ static abi_long do_fcntl(int fd, int cmd, abi_ulong arg)
     case TARGET_F_GETLEASE:
         ret = get_errno(fcntl(fd, host_cmd, arg));
         break;
+
+    case TARGET_F_SETOWN_EX:
+        if (!lock_user_struct(VERIFY_READ, target_foex, arg, 1))
+            return -TARGET_EFAULT;
+	/* XXX Assumes that types are the same for all hosts/targets.
+	   Currently true.  */
+	foex.type = tswap32(target_foex->type);
+	foex.pid = tswap32(target_foex->pid);
+        unlock_user_struct(target_foex, arg, 0);
+        ret = get_errno(fcntl(fd, host_cmd, &foex));
+	break;
+
+    case TARGET_F_GETOWN_EX:
+        ret = get_errno(fcntl(fd, host_cmd, &foex));
+        if (ret == 0) {
+            if (!lock_user_struct(VERIFY_WRITE, target_foex, arg, 0))
+                return -TARGET_EFAULT;
+	    target_foex->type = tswap32(foex.type);
+	    target_foex->pid = tswap32(foex.type);
+            unlock_user_struct(target_fl64, arg, 1);
+        }
+	break;
 
     default:
         ret = get_errno(fcntl(fd, cmd, arg));
