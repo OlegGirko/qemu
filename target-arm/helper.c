@@ -3352,16 +3352,16 @@ float64 VFP_HELPER(sqrt, d)(float64 a, CPUARMState *env)
     return float64_sqrt(a, &env->vfp.fp_status);
 }
 
-/* XXX: check quiet/signaling case */
+/* XXX: check/implement signaling NaN case */
 #define DO_VFP_cmp(p, type) \
 uint32_t VFP_HELPER(cmp, p)(type a, type b, CPUARMState *env)  \
 { \
     uint32_t flags; \
     switch(type ## _compare_quiet(a, b, &env->vfp.fp_status)) { \
-    case float_relation_equal:              flags = PSTATE_Z; break; \
+    case float_relation_equal:              flags = PSTATE_Z | PSTATE_C; break; \
     case float_relation_less:               flags = PSTATE_N; break; \
     case float_relation_greater:            flags = PSTATE_C; break; \
-    default: case float_relation_unordered: flags = PSTATE_V; break; \
+    default: case float_relation_unordered: flags = PSTATE_C | PSTATE_V; break; \
     } \
     return flags; \
 } \
@@ -3375,10 +3375,10 @@ uint32_t VFP_HELPER(cmpe, p)(type a, type b, CPUARMState *env) \
 { \
     uint32_t flags; \
     switch(type ## _compare(a, b, &env->vfp.fp_status)) { \
-    case float_relation_equal:              flags = PSTATE_Z; break; \
+    case float_relation_equal:              flags = PSTATE_Z | PSTATE_C; break; \
     case float_relation_less:               flags = PSTATE_N; break; \
     case float_relation_greater:            flags = PSTATE_C; break; \
-    default: case float_relation_unordered: flags = PSTATE_V; break; \
+    default: case float_relation_unordered: flags = PSTATE_C | PSTATE_V; break; \
     } \
     qemu_log("fcmpe: %d\n", flags); \
     return flags; \
