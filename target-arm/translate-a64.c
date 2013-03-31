@@ -3535,22 +3535,22 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 	      handle_ins_elem(s, insn);
 	    else if (get_bits(insn, 29, 2) == 1) { /* unalloc */
 		goto unknown_insn;
-	    }
-	    switch (get_bits(insn, 11, 4)) {
-	    case 0x1: /* DUP general reg */
-		handle_dupg(s, insn);
-		break;
-	    case 0x7: /* UMOV */
-	    case 0x5: /* SMOV */
-		handle_umov_smov(s, insn);
-		break;
-	    case 0x3: /* INS general reg */
-		handle_insg(s, insn);
-		break;
-	    case 0x0: /* DUP element */
-	    default:
-		goto unknown_insn;
-	    }
+	    } else
+	      switch (get_bits(insn, 11, 4)) {
+	      case 0x1: /* DUP general reg */
+		  handle_dupg(s, insn);
+		  break;
+	      case 0x7: /* UMOV */
+	      case 0x5: /* SMOV */
+		  handle_umov_smov(s, insn);
+		  break;
+	      case 0x3: /* INS general reg */
+		  handle_insg(s, insn);
+		  break;
+	      case 0x0: /* DUP element */
+	      default:
+		  goto unknown_insn;
+	      }
         } else if (get_bits(insn, 21, 1) &&
                    get_bits(insn, 10, 1)) {
 	    if (get_bits(insn, 11, 5) == 0x3)
