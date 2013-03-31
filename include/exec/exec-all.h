@@ -44,7 +44,9 @@ struct TranslationBlock;
 typedef struct TranslationBlock TranslationBlock;
 
 /* XXX: make safe guess about sizes */
-#define MAX_OP_PER_INSTR 208
+/* The aarch64 multiple load/stores can get extremely long.
+   We rather should use helpers, not the silly inline sequences.  */
+#define MAX_OP_PER_INSTR 280
 
 #if HOST_LONG_BITS == 32
 #define MAX_OPC_PARAM_PER_ARG 2

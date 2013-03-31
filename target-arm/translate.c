@@ -9901,6 +9901,10 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
     target_ulong next_page_start;
     int num_insns;
     int max_insns;
+#if 0
+    static int max_insn_size;
+    uint16_t *old_opc_ptr = tcg_ctx.gen_opc_buf;
+#endif
 
     /* generate intermediate code */
     pc_start = tb->pc;
@@ -10064,6 +10068,14 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
          * Also stop translation when a page boundary is reached.  This
          * ensures prefetch aborts occur at the right place.  */
         num_insns ++;
+#if 0
+	if (tcg_ctx.gen_opc_ptr - old_opc_ptr > max_insn_size) {
+	    max_insn_size = tcg_ctx.gen_opc_ptr - old_opc_ptr;
+	    printf ("AAAA: max_size=%d\n", max_insn_size);
+	}
+	old_opc_ptr = tcg_ctx.gen_opc_ptr;
+//        printf ("ZZZZ, num_insns=%d, bufsz=%d\n", num_insns, tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf);
+#endif
     } while (!dc->is_jmp && tcg_ctx.gen_opc_ptr < gen_opc_end &&
              !cs->singlestep_enabled &&
              !singlestep &&
@@ -10162,6 +10174,13 @@ done_generating:
         qemu_log("\n");
     }
 #endif
+
+    if ((tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf) >= OPC_BUF_SIZE) {
+        qemu_log ("ARGH, insn buffer overrun: num_insns=%d, bufsz=%d\n",
+		  num_insns, (int)(tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf));
+	exit (1);
+    }
+
     if (search_pc) {
         j = tcg_ctx.gen_opc_ptr - tcg_ctx.gen_opc_buf;
         lj++;

@@ -2280,6 +2280,12 @@ static inline int tcg_gen_code_common(TCGContext *s, uint8_t *gen_code_buf,
     s->opt_time -= profile_getclock();
 #endif
 
+#if 0
+    if ((s->gen_opc_ptr - s->gen_opc_buf) >= OPC_BUF_SIZE) {
+      printf ("XXXXXX\n");
+      exit (1);
+    }
+#endif
 #ifdef USE_TCG_OPTIMIZATIONS
     s->gen_opparam_ptr =
         tcg_optimize(s, s->gen_opc_ptr, s->gen_opparam_buf, tcg_op_defs);
