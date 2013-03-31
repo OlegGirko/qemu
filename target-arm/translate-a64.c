@@ -3111,100 +3111,118 @@ static void handle_simdmovi(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_imm);
 }
 
-/* SIMD shift ushll */
-static void handle_ushll(DisasContext *s, uint32_t insn)
+/* AdvSIMD shift by immediate.  */
+static void handle_simd_shifti(DisasContext *s, uint32_t insn)
 {
+    /* This handles the vector encoding, many of the shifts also
+       have a scalar encoding (in page 0x1f), which we also could
+       handle with some adjustments.  */
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
+    int opcode = get_bits(insn, 11, 5);
+    int immb = get_bits(insn, 16, 3);
     int immh = get_bits(insn, 19, 4);
+    bool is_u = get_bits(insn, 29, 1);
     bool is_q = get_bits(insn, 30, 1);
+    bool accumulate = get_bits(insn, 12, 1);
+    bool round = get_bits(insn, 13, 1);
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
     TCGv_i64 tcg_tmp = tcg_temp_new_i64();
+    TCGv_i64 tmp2;
     int i;
     int ebytes;
     int size;
-    int shift = get_bits(insn, 16, 7);
+    int shift = immh << 3 | immb;
 
-    if (is_q) {
-        freg_offs_n += sizeof(float64);
+    if (!immh) {
+	/* Should have been handled by handle_simdmovi.  */
+	unallocated_encoding(s);
+	return;
     }
-
-    for (size = 0; !(immh & (1 << size)); size++) {
-        if (size > 3) {
-            unallocated_encoding(s);
-            return;
-        }
+    size = 32 - clz32(immh) - 1;
+    if (size > 3 && !is_q) {
+        unallocated_encoding(s);
+        return;
     }
 
     ebytes = 1 << size;
-    shift -= (8 << size);
 
-    if (!immh) {
-        /* XXX see asimdimm */
-        unallocated_encoding(s);
-        return;
+    switch (opcode) {
+    case 0x00: /* SSHR / USHR */
+    case 0x02: /* SSRA / USRA (accumulate) */
+    case 0x04: /* SRSHR / URSHR (rounding) */
+    case 0x06: /* SRSRA / URSRA (accum + rounding) */
+	shift = 2 * (8 << size) - shift;
+	accumulate = get_bits(insn, 12, 1);
+	round = get_bits(insn, 13, 1);
+	break;
+    case 0x0a: /* SHL / SLI */
+	if (is_u) {
+	    /* SLI not implemented */
+	    unallocated_encoding(s);
+	    return;
+	}
+	accumulate = round = false;
+	shift = shift - (8 << size);
+	break;
+    case 0x14: /* SSHLL / USHLL */
+	accumulate = round = false;
+	shift = shift - (8 << size);
+	/* Do as if datasize is 64 always.  */
+	if (is_q)
+	  freg_offs_n += sizeof(float64);
+	is_q = false;
+	break;
+    default:
+	/* So we don't implement any of the Narrow or saturating shifts,
+	   neither do we implement the fixed-point conversions in this
+	   page (SCVTF, FCVTZS, UCVTF, FCVTZU).  */
+	unallocated_encoding(s);
+	return;
     }
 
-    if (immh & 0x8) {
-        unallocated_encoding(s);
-        return;
+    if (accumulate)
+      tmp2 = tcg_temp_new_i64();
+
+    for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
+        simd_ld(tcg_tmp, freg_offs_n + i, size, !is_u);
+	if (round)
+	  tcg_gen_addi_i64(tcg_tmp, tcg_tmp, 1 << (shift - 1));
+	switch (opcode) {
+	case 0x00: /* SSHR / USHR */
+	case 0x02: /* SSRA / USRA (accumulate) */
+	case 0x04: /* SRSHR / URSHR (rounding) */
+	case 0x06: /* SRSRA / URSRA (accum + rounding) */
+	    if (is_u)
+	      tcg_gen_shri_i64(tcg_tmp, tcg_tmp, shift);
+	    else
+	      tcg_gen_sari_i64(tcg_tmp, tcg_tmp, shift);
+	    break;
+	case 0x0a: /* SHL / SLI */
+	case 0x14: /* SSHLL / USHLL */
+	    tcg_gen_shli_i64(tcg_tmp, tcg_tmp, shift);
+	    break;
+	}
+	if (accumulate) {
+	    simd_ld(tmp2, freg_offs_d + i, size, !is_u);
+	    tcg_gen_add_i64(tcg_tmp, tcg_tmp, tmp2);
+	}
+	if (opcode != 0x14)
+	  simd_st(tcg_tmp, freg_offs_d + i, size);
+	else
+	  simd_st(tcg_tmp, freg_offs_d + 2 * i, size + 1);
     }
 
-    for (i = 0; i < (8 / ebytes); i++) {
-        simd_ld(tcg_tmp, freg_offs_n + (i * ebytes), size, false);
-        tcg_gen_shli_i64(tcg_tmp, tcg_tmp, shift);
-        simd_st(tcg_tmp, freg_offs_d + (i * ebytes * 2), size + 1);
-    }
-
+    if (accumulate)
+      tcg_temp_free_i64(tmp2);
     tcg_temp_free_i64(tcg_tmp);
-}
 
-/* SIMD shift shl */
-static void handle_simdshl(DisasContext *s, uint32_t insn)
-{
-    int rd = get_bits(insn, 0, 5);
-    int rn = get_bits(insn, 5, 5);
-    int immh = get_bits(insn, 19, 4);
-    bool is_q = get_bits(insn, 30, 1);
-    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
-    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
-    TCGv_i64 tcg_tmp = tcg_temp_new_i64();
-    int i;
-    int ebytes;
-    int size;
-    int shift = get_bits(insn, 16, 7);
-
-    size = clz32(immh) - (31 - 4);
-
-    if (size > 3) {
-        /* XXX implement 128bit operations */
-        unallocated_encoding(s);
-        return;
-    }
-
-    ebytes = 1 << size;
-    shift -= (8 << size);
-
-    if (!immh) {
-        /* XXX see asimdimm */
-        unallocated_encoding(s);
-        return;
-    }
-
-    for (i = 0; i < (16 / ebytes); i++) {
-        simd_ld(tcg_tmp, freg_offs_n + (i * ebytes), size, false);
-        tcg_gen_shli_i64(tcg_tmp, tcg_tmp, shift);
-        simd_st(tcg_tmp, freg_offs_d + (i * ebytes), size);
-    }
-
-    if (!is_q) {
+    if (opcode != 0x14 && !is_q) {
         TCGv_i64 tcg_zero = tcg_const_i64(0);
         simd_st(tcg_zero, freg_offs_d + sizeof(float64), 3);
         tcg_temp_free_i64(tcg_zero);
     }
-
-    tcg_temp_free_i64(tcg_tmp);
 }
 
 /* SIMD load/store multiple (post-indexed) */
@@ -3571,12 +3589,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         if (!get_bits(insn, 31, 1) && !get_bits(insn, 19, 5) &&
             (get_bits(insn, 10, 2) == 1)) {
             handle_simdmovi(s, insn);
-        } else if (!get_bits(insn, 31, 1) && !get_bits(insn, 23, 1) &&
-                   (get_bits(insn, 10, 6) == 0x29)) {
-            handle_ushll(s, insn);
-        } else if (!get_bits(insn, 31, 1) && !get_bits(insn, 23, 1) &&
-                   (get_bits(insn, 10, 6) == 0x15)) {
-            handle_simdshl(s, insn);
+	} else if (!get_bits(insn, 31, 1) && !get_bits(insn, 23, 1) &&
+		   get_bits(insn, 10, 1)) {
+	    handle_simd_shifti(s, insn);
         } else {
             goto unknown_insn;
         }
