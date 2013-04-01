@@ -4433,6 +4433,15 @@ static int do_fork(CPUArchState *env, unsigned int flags, abi_ulong newsp,
                 cpu_set_tls (env, newtls);
             if (flags & CLONE_CHILD_CLEARTID)
                 ts->child_tidptr = child_tidptr;
+	    {
+	        /* Activate all CPUs again when forking.  */
+	        int i;
+		cpu_set_t mask;
+		CPU_ZERO(&mask);
+		for (i = 0; i < CPU_SETSIZE; i++)
+		  CPU_SET(i, &mask);
+		sched_setaffinity(0, sizeof(mask), &mask);
+	    }
         } else {
             fork_end(0);
         }
