@@ -2814,6 +2814,23 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 	      break;
 	    }
 
+	case 0x08: /* SSHL / USHL */
+	case 0x09: /* SQSHL / UQSHL (saturating) */
+	case 0x0a: /* SRSHL / URSHL (rounding) */
+	case 0x0b: /* SQRSHL / UQRSHL (sat + round) */
+	    {
+	      /* The neon helpers expect 32bit TCGv's for sizes < 64.  */
+	      TCGv_i32 insncode = tcg_const_i32(insn);
+	      /* The saturating ones might set the QC flag in fpcsr,
+	         so need the environment.  */
+	      if (opcode & 1)
+		gen_helper_simd_op3s_env(tcg_res, cpu_env, tcg_op1,
+					 tcg_op2, insncode);
+	      else
+		gen_helper_simd_op3s(tcg_res, tcg_op1, tcg_op2, insncode);
+	    }
+	    break;
+
         default:
             unallocated_encoding(s);
             return;

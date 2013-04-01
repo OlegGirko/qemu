@@ -279,3 +279,64 @@ void HELPER(set_rmode)(uint32_t rmode, void *fp_status)
 
     set_float_rounding_mode(rmode, fp_status);
 }
+
+uint64_t HELPER(simd_op3s)(uint64_t op1, uint64_t op2, uint32_t insn)
+{
+    int size = get_bits(insn, 22, 2);
+    int opcode = get_bits(insn, 11, 5);
+    bool is_u = get_bits(insn, 29, 1);
+    /* The neon helpers < 64bit use i32 values, to which we simply
+       truncate per call.  */
+    switch ((opcode << 4) | (size << 1) | is_u) {
+    /* SSHL / USHL */
+    case 0x80: return helper_neon_shl_s8 (op1, op2);
+    case 0x81: return helper_neon_shl_u8 (op1, op2);
+    case 0x82: return helper_neon_shl_s16 (op1, op2);
+    case 0x83: return helper_neon_shl_u16 (op1, op2);
+    case 0x84: return helper_neon_shl_s32 (op1, op2);
+    case 0x85: return helper_neon_shl_u32 (op1, op2);
+    case 0x86: return helper_neon_shl_s64 (op1, op2);
+    case 0x87: return helper_neon_shl_u64 (op1, op2);
+
+    /* SRSHL / URSHL (rounding) */
+    case 0xa0: return helper_neon_rshl_s8 (op1, op2);
+    case 0xa1: return helper_neon_rshl_u8 (op1, op2);
+    case 0xa2: return helper_neon_rshl_s16 (op1, op2);
+    case 0xa3: return helper_neon_rshl_u16 (op1, op2);
+    case 0xa4: return helper_neon_rshl_s32 (op1, op2);
+    case 0xa5: return helper_neon_rshl_u32 (op1, op2);
+    case 0xa6: return helper_neon_rshl_s64 (op1, op2);
+    case 0xa7: return helper_neon_rshl_u64 (op1, op2);
+    default: return 0;
+    }
+}
+
+uint64_t HELPER(simd_op3s_env)(CPUARMState *env, uint64_t op1, uint64_t op2,
+			      uint32_t insn)
+{
+    int size = get_bits(insn, 22, 2);
+    int opcode = get_bits(insn, 11, 5);
+    bool is_u = get_bits(insn, 29, 1);
+    switch ((opcode << 4) | (size << 1) | is_u) {
+    /* SQSHL / UQSHL (saturating) */
+    case 0x90: return helper_neon_qshl_s8 (env, op1, op2);
+    case 0x91: return helper_neon_qshl_u8 (env, op1, op2);
+    case 0x92: return helper_neon_qshl_s16 (env, op1, op2);
+    case 0x93: return helper_neon_qshl_u16 (env, op1, op2);
+    case 0x94: return helper_neon_qshl_s32 (env, op1, op2);
+    case 0x95: return helper_neon_qshl_u32 (env, op1, op2);
+    case 0x96: return helper_neon_qshl_s64 (env, op1, op2);
+    case 0x97: return helper_neon_qshl_u64 (env, op1, op2);
+
+    /* SQRSHL / UQRSHL (sat + round) */
+    case 0xb0: return helper_neon_qrshl_s8 (env, op1, op2);
+    case 0xb1: return helper_neon_qrshl_u8 (env, op1, op2);
+    case 0xb2: return helper_neon_qrshl_s16 (env, op1, op2);
+    case 0xb3: return helper_neon_qrshl_u16 (env, op1, op2);
+    case 0xb4: return helper_neon_qrshl_s32 (env, op1, op2);
+    case 0xb5: return helper_neon_qrshl_u32 (env, op1, op2);
+    case 0xb6: return helper_neon_qrshl_s64 (env, op1, op2);
+    case 0xb7: return helper_neon_qrshl_u64 (env, op1, op2);
+    default: return 0;
+    }
+}
