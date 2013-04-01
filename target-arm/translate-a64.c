@@ -2802,7 +2802,7 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 		  else
 		    gen_helper_vfp_addd(tcg_res, tcg_op1, tcg_op2, fpst);
 		  break;
-	      case 0x110: /* FSUB */
+	      case 0x11a: /* FSUB */
 		  if (size == 2)
 		    gen_helper_vfp_subs(tcg_res, tcg_op1, tcg_op2, fpst);
 		  else
