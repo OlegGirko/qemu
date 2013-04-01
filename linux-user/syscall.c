@@ -4630,7 +4630,7 @@ static abi_long do_fcntl(int fd, int cmd, abi_ulong arg)
                 return -TARGET_EFAULT;
 	    target_foex->type = tswap32(foex.type);
 	    target_foex->pid = tswap32(foex.type);
-            unlock_user_struct(target_fl64, arg, 1);
+            unlock_user_struct(target_foex, arg, 1);
         }
 	break;
 
