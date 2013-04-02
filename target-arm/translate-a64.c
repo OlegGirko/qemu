@@ -3036,6 +3036,9 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
 	    unallocated_encoding(s);
 	    return;
 	}
+	/* We need to initialize tcg_res, even though we overwrite
+	   all its bytes, otherwise TCG will generate wrong code.  */
+	tcg_gen_movi_i64(tcg_res, 0);
 	for (i = 0; i < 8; i += ebytes) {
 	    /* XXX Should we be able to just generate a smaller
 	       load?  */
