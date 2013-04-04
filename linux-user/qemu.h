@@ -271,6 +271,8 @@ void mmap_fork_end(int child);
 
 /* main.c */
 extern unsigned long guest_stack_size;
+extern void pin_to_one_cpu (void);
+extern void unpin (void);
 
 /* user access */
 

@@ -652,36 +652,8 @@ int do_sigaction(int sig, const struct target_sigaction *act,
              * pin our guest process to a single host CPU if we're using the
              * boehm-gc.
              */
-            if ((k->sa_flags & TARGET_SA_RESTART) && host_sig == SIGPWR) {
-		static int thecpu = -1;
-                cpu_set_t mask;
-		if (thecpu < 0) {
-		    /* Try to find out a randomized CPU to which to pin,
-		       so that potential parallel qemu processes don't
-		       compete for the same CPU.  Select one of the
-		       CPUs to which we're pinned already by counting
-		       them and choosing the "random"th one.  */
-		    int count, i;
-		    if (sched_getaffinity (0, sizeof(mask), &mask) < 0)
-		        thecpu = 0;
-		    else {
-			count = CPU_COUNT (&mask);
-			if (count > 1) {
-			    thecpu = getpid() % count;
-			    for (i = 0; i < CPU_SETSIZE; i++)
-			        if (CPU_ISSET (i, &mask)) {
-				    if (thecpu-- == 0)
-				        break;
-			        }
-			    thecpu = i;
-			} else
-			  thecpu = 0;
-		    }
-		}
-                CPU_ZERO(&mask);
-                CPU_SET(thecpu, &mask);
-                sched_setaffinity(0, sizeof(mask), &mask);
-            }
+            if ((k->sa_flags & TARGET_SA_RESTART) && host_sig == SIGPWR)
+		pin_to_one_cpu ();
 #else
             if (k->sa_flags & TARGET_SA_RESTART)
                 act1.sa_flags |= SA_RESTART;

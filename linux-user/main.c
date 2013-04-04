@@ -207,6 +207,48 @@ void cpu_list_unlock(void)
     pthread_mutex_unlock(&cpu_list_mutex);
 }
 
+static int pinned_cpu = -1;
+static cpu_set_t old_cpu_mask;
+
+void pin_to_one_cpu (void)
+{
+  cpu_set_t mask;
+  if (pinned_cpu < 0) {
+      /* Try to find out a randomized CPU to which to pin,
+	 so that potential parallel qemu processes don't
+	 compete for the same CPU.  Select one of the
+	 CPUs to which we're pinned already by counting
+	 them and choosing the "random"th one.  */
+      int count, i;
+      if (sched_getaffinity (0, sizeof(old_cpu_mask), &old_cpu_mask) < 0)
+	pinned_cpu = 0;
+      else {
+	  count = CPU_COUNT (&old_cpu_mask);
+	  if (count > 1) {
+	      pinned_cpu = getpid() % count;
+	      for (i = 0; i < CPU_SETSIZE; i++)
+		if (CPU_ISSET (i, &old_cpu_mask)) {
+		    if (pinned_cpu-- == 0)
+		      break;
+		}
+	      pinned_cpu = i;
+	  } else
+	    pinned_cpu = 0;
+      }
+  }
+  CPU_ZERO(&mask);
+  CPU_SET(pinned_cpu, &mask);
+  sched_setaffinity(0, sizeof(mask), &mask);
+}
+
+void unpin (void)
+{
+  if (pinned_cpu < 0)
+    return;
+  pinned_cpu = -1;
+  if (sched_setaffinity(0, sizeof(old_cpu_mask), &old_cpu_mask) < 0)
+    perror ("XXXXX Huh?");
+}
 
 #ifdef TARGET_I386
 /***********************************************************/
