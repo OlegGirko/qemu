@@ -2724,6 +2724,13 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     int i;
 
     switch (opcode) {
+    case 0x13: /* MUL / PMUL */
+	if (is_u && size != 0) {
+	    /* PMUL is only defined for bytes.  */
+	    unallocated_encoding(s);
+	    return;
+	}
+	break;
 	       /* base / pair  / sz&2 / sz&2 && pair */
     case 0x1a: /* FADD / FADDP / FSUB / FABD */
 	is_float = true;
@@ -2739,6 +2746,10 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 	break;
     }
 
+    /* XXX this is all suboptimal.  When we use the neon helpers
+       they already work on a whole 32bit vector (e.g. 4 bytes at once),
+       but we still do the loop element-wise, i.e. do four times or
+       twice as much work as needed.  */
     for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
         simd_ld(tcg_op1, freg_offs_n + i, size, !is_u);
         simd_ld(tcg_op2, freg_offs_m + i, size, !is_u);
@@ -2751,6 +2762,13 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
                 tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
             }
             break;
+	case 0x13: /* MUL / PMUL */
+	    if (is_u) {
+		gen_helper_neon_mul_p8 (tcg_res, tcg_op1, tcg_op2);
+	    } else {
+		tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
+	    }
+	    break;
 	case 0x0c: /* SMAX / UMAX */
 	    tcg_gen_movcond_i64 (is_u ? TCG_COND_GEU : TCG_COND_GE,
 				 tcg_res,
@@ -2819,7 +2837,6 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 	case 0x0a: /* SRSHL / URSHL (rounding) */
 	case 0x0b: /* SQRSHL / UQRSHL (sat + round) */
 	    {
-	      /* The neon helpers expect 32bit TCGv's for sizes < 64.  */
 	      TCGv_i32 insncode = tcg_const_i32(insn);
 	      /* The saturating ones might set the QC flag in fpcsr,
 	         so need the environment.  */
