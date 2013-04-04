@@ -3703,7 +3703,13 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 		handle_simd_zip(s, insn);
 	    } else {
 		/* AdvSIMD TBL/TBX */
-		goto unknown_insn;
+		if (get_bits(insn, 22, 2))
+		  goto unknown_insn;
+		else {
+		    TCGv_i32 tcginsn = tcg_const_i32(insn);
+		    gen_helper_simd_tbl(cpu_env, tcginsn);
+		    tcg_temp_free_i32(tcginsn);
+		}
 	    }
         } else {
             goto unknown_insn;
