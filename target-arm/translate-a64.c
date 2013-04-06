@@ -3282,10 +3282,20 @@ static void handle_simd_shifti(DisasContext *s, uint32_t insn)
     case 0x14: /* SSHLL / USHLL */
 	accumulate = round = false;
 	shift = shift - (8 << size);
+	if (size >= 3) {
+	    unallocated_encoding(s);
+	    return;
+	}
 	/* Do as if datasize is 64 always.  */
 	if (is_q)
 	  freg_offs_n += sizeof(float64);
 	is_q = false;
+	/* For the LL variants the store is larger than the load,
+	   so if rd == rn we would overwrite parts of our input.
+	   So load everything right now and use shifts in the main 
+	   loop.  */
+	tmp2 = tcg_temp_new_i64();
+	simd_ld(tmp2, freg_offs_n, 3, false);
 	break;
     default:
 	/* So we don't implement any of the Narrow or saturating shifts,
@@ -3299,7 +3309,19 @@ static void handle_simd_shifti(DisasContext *s, uint32_t insn)
       tmp2 = tcg_temp_new_i64();
 
     for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
-        simd_ld(tcg_tmp, freg_offs_n + i, size, !is_u);
+	if (opcode != 0x14)
+	  simd_ld(tcg_tmp, freg_offs_n + i, size, !is_u);
+	else {
+	    tcg_gen_shri_i64(tcg_tmp, tmp2, i*8);
+	    switch (size << 1 | is_u) {
+	    case 0: tcg_gen_ext8s_i64 (tcg_tmp, tcg_tmp); break;
+	    case 1: tcg_gen_ext8u_i64 (tcg_tmp, tcg_tmp); break;
+	    case 2: tcg_gen_ext16s_i64 (tcg_tmp, tcg_tmp); break;
+	    case 3: tcg_gen_ext16u_i64 (tcg_tmp, tcg_tmp); break;
+	    case 4: tcg_gen_ext32s_i64 (tcg_tmp, tcg_tmp); break;
+	    case 5: tcg_gen_ext32u_i64 (tcg_tmp, tcg_tmp); break;
+	    }
+	}
 	if (round)
 	  tcg_gen_addi_i64(tcg_tmp, tcg_tmp, 1 << (shift - 1));
 	switch (opcode) {
