@@ -1974,20 +1974,28 @@ static void handle_fpfpconv(DisasContext *s, uint32_t insn)
     bool is_s = get_bits(insn, 29, 1);
     int type = get_bits(insn, 22, 2);
     int opcode = get_bits(insn, 16, 3);
-    int rmode = get_bits(insn, 20, 2);
+    int rmode = get_bits(insn, 19, 2);
     bool direction;
 
-    if (is_s || (type > 1) || (opcode > 1)) {
+    if (is_s || (type > 1) || (opcode > 3)) {
         unallocated_encoding(s);
         return;
     }
 
     switch (rmode) {
-    case 0x1: /* [S|U]CVTF (scalar->float) */
-        direction = 0;
+    case 0x0: /* [S|U]CVTF (scalar->float) */
+	if (opcode < 2) {
+	    unallocated_encoding(s);
+	    return;
+	}
+        direction = false;
         break;
     case 0x3: /* FCVTZ[S|U] (float->scalar) */
-        direction = 1;
+	if (opcode > 1) {
+	    unallocated_encoding(s);
+	    return;
+	}
+        direction = true;
         break;
     default:
         unallocated_encoding(s);
