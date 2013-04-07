@@ -2002,6 +2002,8 @@ static void handle_fpfpconv(DisasContext *s, uint32_t insn)
         return;
     }
 
+    /* XXX Hardcodes round_zero, which is correct only for
+       FCVTZ.  The [SU]CVTF use FPCR rounding.  */
     handle_fpfpcvt(s, insn, direction, ROUND_MODE_ZERO);
 }
 
@@ -2049,7 +2051,12 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
     bool is_s = get_bits(insn, 29, 1);
     bool is_32bit = !get_bits(insn, 31, 1);
 
-    if (!is_s && (rmode < 2) && (opcode > 5)) {
+    if (is_s) {
+	unallocated_encoding(s);
+	return;
+    }
+
+    if ((rmode < 2) && (opcode > 5)) {
         /* FMOV */
         bool itof = opcode & 1;
         int dest = itof ? rd : rn;
@@ -2087,9 +2094,16 @@ static void handle_fpintconv(DisasContext *s, uint32_t insn)
         if (is_32bit && !itof) {
             tcg_gen_ext32u_i64(cpu_reg(rd), cpu_reg(rd));
         }
-    } else if (!is_s && ((opcode & 0x6) < 5)) {
+    } else if (opcode < 4) {
         /* [S|U]CVTF and FCVT[N|P|M|Z][S|U] */
-        handle_fpfpcvt(s, insn, !(opcode & 0x6), rmode);
+	/* XXX Uses rmode rounding for ItoF, which is supposed to
+	   use FPCR rounding.  For FtoI rmode is correct.  */
+        handle_fpfpcvt(s, insn, opcode < 2, rmode);
+    } else if (rmode == 0 && opcode < 6) {
+	/* FCVTA[SU] */
+	/* XXX This should use ties-away-from-zero rounding,
+	   which we don't implement, so substitute for TIEEVEN.  */
+	handle_fpfpcvt(s, insn, true /*FtoI*/, ROUND_MODE_TIEEVEN);
     } else {
         /* XXX */
         unallocated_encoding(s);
