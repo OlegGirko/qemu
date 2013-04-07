@@ -880,15 +880,24 @@ void cpu_loop(CPUARMState *env)
         case EXCP_BKPT:
             {
 #ifdef TARGET_ARM64
-                env->xregs[0] = do_syscall(env,
-                                           env->xregs[8],
-                                           env->xregs[0],
-                                           env->xregs[1],
-                                           env->xregs[2],
-                                           env->xregs[3],
-                                           env->xregs[4],
-                                           env->xregs[5],
-                                           0, 0);
+	        TaskState *ts = ((CPUArchState*)env)->opaque;
+	        target_ulong r;
+                r = do_syscall(env,
+			       env->xregs[8],
+			       env->xregs[0],
+			       env->xregs[1],
+			       env->xregs[2],
+			       env->xregs[3],
+			       env->xregs[4],
+			       env->xregs[5],
+			       0, 0);
+		if ((r == -EINTR) && ts->signal_restart &&
+		    syscall_restartable(env->xregs[0])) {
+		    env->pc -= 4;
+		} else {
+		    env->xregs[0] = r;
+		}
+		ts->signal_restart = 0;
 #else
 
                 env->eabi = 1;
