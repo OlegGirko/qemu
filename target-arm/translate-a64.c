@@ -3115,6 +3115,21 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
 	    simd_st(tcg_res, freg_offs_d + i, size);
 	}
 	break;
+    case 0x05: /* CNT / NOT / RBIT */
+	if (!is_u || size != 0) {
+	    /* CNT or RBIT */
+	    unallocated_encoding(s);
+	    return;
+	}
+	simd_ld(tcg_op1, freg_offs_n, 3, false);
+	tcg_gen_not_i64(tcg_res, tcg_op1);
+	simd_st(tcg_res, freg_offs_d, 3);
+	if (is_q) {
+	    simd_ld(tcg_op1, freg_offs_n + sizeof(float64), 3, false);
+	    tcg_gen_not_i64(tcg_res, tcg_op1);
+	    simd_st(tcg_res, freg_offs_d + sizeof(float64), 3);
+	}
+	break;
 
     default:
 	unallocated_encoding(s);
