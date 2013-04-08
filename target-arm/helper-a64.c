@@ -376,3 +376,9 @@ void HELPER(simd_tbl)(CPUARMState *env, uint32_t insn)
     if (!is_q)
       env->vfp.regs[rd * 2 + 1] = 0;
 }
+
+void HELPER(cmp_addr)(uint64_t addr, uint64_t pc, uint32_t insn)
+{
+  if (addr == 0x4003af6000ULL)
+    qemu_log("cmp_addr==0x4003af6000ULL at 0x%lx, insn=0x%08x", pc, insn);
+}

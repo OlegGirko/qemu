@@ -499,6 +499,7 @@ DEF_HELPER_FLAGS_2(rints, TCG_CALL_NO_RWG_SE, f32, f32, ptr)
 DEF_HELPER_FLAGS_3(simd_op3s, TCG_CALL_NO_RWG_SE, i64, i64, i64, i32)
 DEF_HELPER_4(simd_op3s_env, i64, env, i64, i64, i32)
 DEF_HELPER_2(simd_tbl, void, env, i32)
+DEF_HELPER_3(cmp_addr, void, i64, i64, i32)
 DEF_HELPER_1(tb_flush, void, env)
 DEF_HELPER_2(set_rmode, void, i32, ptr)
 

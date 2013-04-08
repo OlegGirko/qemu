@@ -37,6 +37,7 @@
 
 // #define DEBUG_SINGLESTEP 1
 // #define DEBUG_FLUSH 1
+// #define HACK_WATCHPOINTS
 
 static TCGv_i64 cpu_X[32];
 static TCGv_i64 cpu_pc;
@@ -1049,8 +1050,13 @@ static void ldst_do_gpr(DisasContext *s, int dest, TCGv_i64 tcg_addr, int size,
 }
 
 static void ldst_do(DisasContext *s, int dest, TCGv_i64 tcg_addr, int size,
-                    bool is_store, bool is_signed, bool is_vector)
+                    bool is_store, bool is_signed, bool is_vector, uint32_t insn)
 {
+#ifdef HACK_WATCHPOINTS
+    TCGv_i32 tcg_insn = tcg_const_i32(insn);
+    gen_helper_cmp_addr (tcg_addr, cpu_pc, tcg_insn);
+    tcg_temp_free_i32(tcg_insn);
+#endif
     if (is_vector) {
         ldst_do_vec(s, dest, tcg_addr, size, is_store);
     } else {
@@ -1115,9 +1121,9 @@ static void handle_stp(DisasContext *s, uint32_t insn)
         tcg_gen_addi_i64(tcg_addr, tcg_addr, offset);
     }
 
-    ldst_do(s, rt, tcg_addr, size, is_store, is_signed, is_vector);
+    ldst_do(s, rt, tcg_addr, size, is_store, is_signed, is_vector, insn);
     tcg_gen_addi_i64(tcg_addr, tcg_addr, 1 << size);
-    ldst_do(s, rt2, tcg_addr, size, is_store, is_signed, is_vector);
+    ldst_do(s, rt2, tcg_addr, size, is_store, is_signed, is_vector, insn);
     tcg_gen_subi_i64(tcg_addr, tcg_addr, 1 << size);
 
     if (wback) {
@@ -1300,7 +1306,7 @@ static void handle_literal(DisasContext *s, uint32_t insn)
         goto out;
     }
 
-    ldst_do(s, dest, tcg_addr, size, false, is_signed, is_vector);
+    ldst_do(s, dest, tcg_addr, size, false, is_signed, is_vector, insn);
 
 out:
     tcg_temp_free_i64(tcg_addr);
@@ -1379,7 +1385,7 @@ static void handle_ldst(DisasContext *s, uint32_t insn)
         ldst_calc_index(s, tcg_addr, is_reg_offset, offset, size);
     }
 
-    ldst_do(s, dest, tcg_addr, size, is_store, is_signed, is_vector);
+    ldst_do(s, dest, tcg_addr, size, is_store, is_signed, is_vector, insn);
 
     if (postindex) {
         ldst_calc_index(s, tcg_addr, is_reg_offset, offset, size);
