@@ -7498,21 +7498,23 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
     case TARGET_NR_ppoll:
 # endif
         {
-            struct target_pollfd *target_pfd;
+            struct target_pollfd *target_pfd = NULL;
             unsigned int nfds = arg2;
             int timeout = arg3;
-            struct pollfd *pfd;
+            struct pollfd *pfd = NULL;
             unsigned int i;
 
-            target_pfd = lock_user(VERIFY_WRITE, arg1, sizeof(struct target_pollfd) * nfds, 1);
-            if (!target_pfd)
-                goto efault;
+	    if (nfds) {
+		target_pfd = lock_user(VERIFY_WRITE, arg1, sizeof(struct target_pollfd) * nfds, 1);
+		if (!target_pfd)
+		    goto efault;
 
-            pfd = alloca(sizeof(struct pollfd) * nfds);
-            for(i = 0; i < nfds; i++) {
-                pfd[i].fd = tswap32(target_pfd[i].fd);
-                pfd[i].events = tswap16(target_pfd[i].events);
-            }
+		pfd = alloca(sizeof(struct pollfd) * nfds);
+		for(i = 0; i < nfds; i++) {
+		    pfd[i].fd = tswap32(target_pfd[i].fd);
+		    pfd[i].events = tswap16(target_pfd[i].events);
+		}
+	    }
 
 # ifdef TARGET_NR_ppoll
             if (num == TARGET_NR_ppoll) {
@@ -7522,7 +7524,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
 
                 if (arg3) {
                     if (target_to_host_timespec(timeout_ts, arg3)) {
-                        unlock_user(target_pfd, arg1, 0);
+                        if (target_pfd)
+                            unlock_user(target_pfd, arg1, 0);
                         goto efault;
                     }
                 } else {
@@ -7532,7 +7535,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                 if (arg4) {
                     target_set = lock_user(VERIFY_READ, arg4, sizeof(target_sigset_t), 1);
                     if (!target_set) {
-                        unlock_user(target_pfd, arg1, 0);
+                        if (target_pfd)
+                            unlock_user(target_pfd, arg1, 0);
                         goto efault;
                     }
                     target_to_host_sigset(set, target_set);
@@ -7557,7 +7561,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                     target_pfd[i].revents = tswap16(pfd[i].revents);
                 }
             }
-            unlock_user(target_pfd, arg1, sizeof(struct target_pollfd) * nfds);
+            if (target_pfd)
+                unlock_user(target_pfd, arg1, sizeof(struct target_pollfd) * nfds);
         }
         break;
 #endif
