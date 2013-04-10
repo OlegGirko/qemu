@@ -5272,7 +5272,7 @@ static int resolve_dirfd_path(int dirfd, const char *path, char *resolved_path,
 static int do_openat(void *cpu_env, int dirfd, const char *path,
                      int flags, mode_t mode)
 {
-    char real_path[1024];
+    char real_path[PATH_MAX+1];
     int r;
 
     r = resolve_dirfd_path(dirfd, path, real_path, sizeof(real_path));
