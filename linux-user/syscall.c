@@ -8059,10 +8059,17 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
             uid_t ruid, euid, suid;
             ret = get_errno(getresuid(&ruid, &euid, &suid));
             if (!is_error(ret)) {
+#ifdef USE_UID16
                 if (put_user_u16(high2lowuid(ruid), arg1)
                     || put_user_u16(high2lowuid(euid), arg2)
                     || put_user_u16(high2lowuid(suid), arg3))
                     goto efault;
+#else
+                if (put_user_u32(high2lowuid(ruid), arg1)
+                    || put_user_u32(high2lowuid(euid), arg2)
+                    || put_user_u32(high2lowuid(suid), arg3))
+                    goto efault;
+#endif
             }
         }
         break;
@@ -8080,10 +8087,17 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
             gid_t rgid, egid, sgid;
             ret = get_errno(getresgid(&rgid, &egid, &sgid));
             if (!is_error(ret)) {
+#ifdef USE_UID16
                 if (put_user_u16(high2lowgid(rgid), arg1)
                     || put_user_u16(high2lowgid(egid), arg2)
                     || put_user_u16(high2lowgid(sgid), arg3))
                     goto efault;
+#else
+                if (put_user_u32(high2lowgid(rgid), arg1)
+                    || put_user_u32(high2lowgid(egid), arg2)
+                    || put_user_u32(high2lowgid(sgid), arg3))
+                    goto efault;
+#endif
             }
         }
         break;
