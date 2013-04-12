@@ -1286,6 +1286,7 @@ static void target_setup_frame(int usig, struct target_sigaction *ka,
 {
     struct target_rt_sigframe *frame;
     abi_ulong frame_addr;
+    abi_ulong returnaddr;
     int err = 0;
 
     frame_addr = get_sigframe(ka, env);
@@ -1304,14 +1305,19 @@ static void target_setup_frame(int usig, struct target_sigaction *ka,
                       &frame->uc.tuc_stack.ss_size);
     err |= target_setup_sigframe(frame, env, set);
     /* mov x8,#__NR_rt_sigreturn; svc #0 */
-    err |= __put_user(0xd2801168, &frame->tramp[0]);
-    err |= __put_user(0xd4000001, &frame->tramp[1]);
+    if (ka->sa_flags & TARGET_SA_RESTORER) {
+	returnaddr = ka->sa_restorer;
+    } else {
+	err |= __put_user(0xd2801168, &frame->tramp[0]);
+	err |= __put_user(0xd4000001, &frame->tramp[1]);
+	returnaddr = frame_addr + offsetof(struct target_rt_sigframe, tramp);
+    }
     if (err == 0) {
 	env->xregs[0] = usig;
 	env->sp = frame_addr;
 	env->xregs[29] = env->sp + offsetof(struct target_rt_sigframe, fp);
 	env->pc = ka->_sa_handler;
-	env->xregs[30] = env->sp + offsetof(struct target_rt_sigframe, tramp);
+	env->xregs[30] = returnaddr;
 	if (info) {
 	    err |= copy_siginfo_to_user(&frame->info, info);
 	    env->xregs[1] = frame_addr + offsetof(struct target_rt_sigframe, info);
