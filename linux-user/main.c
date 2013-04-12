@@ -882,6 +882,7 @@ void cpu_loop(CPUARMState *env)
 #ifdef TARGET_ARM64
 	        TaskState *ts = ((CPUArchState*)env)->opaque;
 	        target_ulong r;
+		target_ulong callid = env->xregs[8];
                 r = do_syscall(env,
 			       env->xregs[8],
 			       env->xregs[0],
@@ -892,7 +893,7 @@ void cpu_loop(CPUARMState *env)
 			       env->xregs[5],
 			       0, 0);
 		if ((r == -EINTR) && ts->signal_restart &&
-		    syscall_restartable(env->xregs[0])) {
+		    syscall_restartable(callid)) {
 		    env->pc -= 4;
 		} else {
 		    env->xregs[0] = r;
