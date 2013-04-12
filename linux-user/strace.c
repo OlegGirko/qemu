@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/mount.h>
 #include <sys/mman.h>
+#include <sys/syscall.h>
 #include <unistd.h>
 #include <sched.h>
 #include "qemu.h"
@@ -1570,6 +1571,14 @@ static const struct syscallname scnames[] = {
 
 static int nsyscalls = ARRAY_SIZE(scnames);
 
+static pid_t gettid (void)
+{
+  pid_t ret = syscall (SYS_gettid);
+  if (ret < 0 && errno == ENOSYS)
+    ret = getpid();
+  return ret;
+}
+
 /*
  * The public interface to this module.
  */
@@ -1581,7 +1590,7 @@ print_syscall(int num,
     int i;
     const char *format="%s(" TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld "," TARGET_ABI_FMT_ld ")";
 
-    gemu_log("%d ", getpid() );
+    gemu_log("%d ", gettid() );
 
     for(i=0;i<nsyscalls;i++)
         if( scnames[i].nr == num ) {
