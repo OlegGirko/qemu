@@ -248,6 +248,24 @@ _syscall3(int, sys_sched_setaffinity, pid_t, pid, unsigned int, len,
 _syscall4(int, reboot, int, magic1, int, magic2, unsigned int, cmd,
           void *, arg);
 
+#define wrap_restart(X) \
+({ \
+  TaskState *ts = ((CPUArchState*)thread_cpu->env_ptr)->opaque; \
+  abi_long __ret; \
+  if (sigsetjmp(ts->signal_buf, 1) != 0) \
+    __ret = -TARGET_ERESTART; \
+  else { \
+    ts->signal_in_syscall = 1; \
+    if (ts->signal_pending) \
+      __ret = -TARGET_ERESTART; \
+    else { \
+      __ret = (X); \
+    } \
+  } \
+  ts->signal_in_syscall = 0; \
+  __ret; \
+})
+
 static bitmask_transtbl fcntl_flags_tbl[] = {
   { TARGET_O_ACCMODE,   TARGET_O_WRONLY,    O_ACCMODE,   O_WRONLY,    },
   { TARGET_O_ACCMODE,   TARGET_O_RDWR,      O_ACCMODE,   O_RDWR,      },
@@ -994,7 +1012,8 @@ static abi_long do_select(int n,
         tv_ptr = NULL;
     }
 
-    ret = get_errno(select(n, rfds_ptr, wfds_ptr, efds_ptr, tv_ptr));
+    /*sleep(10);*/
+    ret = wrap_restart(get_errno(select(n, rfds_ptr, wfds_ptr, efds_ptr, tv_ptr)));
 
     if (!is_error(ret)) {
         if (rfd_addr && copy_to_user_fdset(rfd_addr, &rfds, n))
@@ -1834,9 +1853,9 @@ static abi_long do_sendrecvmsg(int fd, abi_ulong target_msg,
     if (send) {
         ret = target_to_host_cmsg(&msg, msgp);
         if (ret == 0)
-            ret = get_errno(sendmsg(fd, &msg, flags));
+            ret = wrap_restart(get_errno(sendmsg(fd, &msg, flags)));
     } else {
-        ret = get_errno(recvmsg(fd, &msg, flags));
+        ret = wrap_restart(get_errno(recvmsg(fd, &msg, flags)));
         if (!is_error(ret)) {
             len = ret;
             ret = host_to_target_cmsg(msgp, &msg);
@@ -2007,9 +2026,9 @@ static abi_long do_sendto(int fd, abi_ulong msg, size_t len, int flags,
             unlock_user(host_msg, msg, 0);
             return ret;
         }
-        ret = get_errno(sendto(fd, host_msg, len, flags, addr, addrlen));
+        ret = wrap_restart(get_errno(sendto(fd, host_msg, len, flags, addr, addrlen)));
     } else {
-        ret = get_errno(send(fd, host_msg, len, flags));
+        ret = wrap_restart(get_errno(send(fd, host_msg, len, flags)));
     }
     unlock_user(host_msg, msg, 0);
     return ret;
@@ -2038,10 +2057,10 @@ static abi_long do_recvfrom(int fd, abi_ulong msg, size_t len, int flags,
             goto fail;
         }
         addr = alloca(addrlen);
-        ret = get_errno(recvfrom(fd, host_msg, len, flags, addr, &addrlen));
+        ret = wrap_restart(get_errno(recvfrom(fd, host_msg, len, flags, addr, &addrlen)));
     } else {
         addr = NULL; /* To keep compiler quiet.  */
-        ret = get_errno(qemu_recv(fd, host_msg, len, flags));
+        ret = wrap_restart(get_errno(qemu_recv(fd, host_msg, len, flags)));
     }
     if (!is_error(ret)) {
         if (target_addr) {
@@ -4892,8 +4911,8 @@ static int do_futex(target_ulong uaddr, int op, int val, target_ulong timeout,
         } else {
             pts = NULL;
         }
-        return get_errno(sys_futex(g2h(uaddr), op, tswap32(val),
-                         pts, NULL, val3));
+        return wrap_restart(get_errno(sys_futex(g2h(uaddr), op, tswap32(val),
+                         pts, NULL, val3)));
     case FUTEX_WAKE:
         return get_errno(sys_futex(g2h(uaddr), op, tswap32(val), NULL, NULL, 0));
     case FUTEX_FD:
@@ -5382,11 +5401,6 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
     void *p;
     TaskState *ts = ((CPUArchState*)cpu_env)->opaque;
 
-    if (!ts->signal_restart) {
-        /* remember syscall info for restart */
-        ts->signal_in_syscall = 1;
-    }
-
 #ifdef DEBUG
     gemu_log("syscall %d", num);
 #endif
@@ -5445,14 +5459,14 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         else {
             if (!(p = lock_user(VERIFY_WRITE, arg2, arg3, 0)))
                 goto efault;
-            ret = get_errno(read(arg1, p, arg3));
+            ret = wrap_restart(get_errno(read(arg1, p, arg3)));
             unlock_user(p, arg2, ret);
         }
         break;
     case TARGET_NR_write:
         if (!(p = lock_user(VERIFY_READ, arg2, arg3, 1)))
             goto efault;
-        ret = get_errno(write(arg1, p, arg3));
+        ret = wrap_restart(get_errno(write(arg1, p, arg3)));
         unlock_user(p, arg2, 0);
         break;
     case TARGET_NR_open:
@@ -5488,7 +5502,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
     case TARGET_NR_waitpid:
         {
             int status;
-            ret = get_errno(waitpid(arg1, &status, arg3));
+            ret = wrap_restart(get_errno(waitpid(arg1, &status, arg3)));
             if (!is_error(ret) && arg2 && ret
                 && put_user_s32(host_to_target_waitstatus(status), arg2))
                 goto efault;
@@ -5500,7 +5514,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         {
             siginfo_t info;
             info.si_pid = 0;
-            ret = get_errno(waitid(arg1, arg2, &info, arg4));
+            ret = wrap_restart(get_errno(waitid(arg1, arg2, &info, arg4)));
             if (!is_error(ret) && arg3 && info.si_pid != 0) {
                 if (!(p = lock_user(VERIFY_WRITE, arg3, sizeof(target_siginfo_t), 0)))
                     goto efault;
@@ -6337,6 +6351,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
             target_to_host_old_sigset(&set, p);
             unlock_user(p, arg1, 0);
 #endif
+	    /* Don't wrap_restart this one.  */
             ret = get_errno(sigsuspend(&set));
         }
         break;
@@ -6348,6 +6363,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                 goto efault;
             target_to_host_sigset(&set, p);
             unlock_user(p, arg1, 0);
+	    /* Don't wrap_restart this one.  */
             ret = get_errno(sigsuspend(&set));
         }
         break;
@@ -6570,8 +6586,9 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                 sig_ptr = NULL;
             }
 
-            ret = get_errno(sys_pselect6(n, rfds_ptr, wfds_ptr, efds_ptr,
-                                         ts_ptr, sig_ptr));
+	    /*sleep(10);*/
+            ret = wrap_restart(get_errno(sys_pselect6(n, rfds_ptr, wfds_ptr, efds_ptr,
+                                         ts_ptr, sig_ptr)));
 
             if (!is_error(ret)) {
                 if (rfd_addr && copy_to_user_fdset(rfd_addr, &rfds, n))
@@ -7099,7 +7116,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                 rusage_ptr = &rusage;
             else
                 rusage_ptr = NULL;
-            ret = get_errno(wait4(arg1, &status, arg3, rusage_ptr));
+            ret = wrap_restart(get_errno(wait4(arg1, &status, arg3, rusage_ptr)));
             if (!is_error(ret)) {
                 if (status_ptr && ret) {
                     status = host_to_target_waitstatus(status);
@@ -7544,7 +7561,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                     set = NULL;
                 }
 
-                ret = get_errno(sys_ppoll(pfd, nfds, timeout_ts, set, _NSIG/8));
+                ret = wrap_restart(get_errno(sys_ppoll(pfd, nfds, timeout_ts, set, _NSIG/8)));
 
                 if (!is_error(ret) && arg3) {
                     host_to_target_timespec(arg3, timeout_ts);
@@ -7554,7 +7571,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                 }
             } else
 # endif
-                ret = get_errno(poll(pfd, nfds, timeout));
+                ret = wrap_restart(get_errno(poll(pfd, nfds, timeout)));
 
             if (!is_error(ret)) {
                 for(i = 0; i < nfds; i++) {
@@ -7575,7 +7592,9 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         {
             struct iovec *vec = lock_iovec(VERIFY_WRITE, arg2, arg3, 0);
             if (vec != NULL) {
-                ret = get_errno(readv(arg1, vec, arg3));
+		/* XXX might be implemented as loop in libc, hence
+		   no syscall, in which case we don't want to wrap it.  */
+                ret = wrap_restart(get_errno(readv(arg1, vec, arg3)));
                 unlock_iovec(vec, arg2, arg3, 1);
             } else {
                 ret = -host_to_target_errno(errno);
@@ -7790,7 +7809,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         }
         if (!(p = lock_user(VERIFY_WRITE, arg2, arg3, 0)))
             goto efault;
-        ret = get_errno(pread64(arg1, p, arg3, target_offset64(arg4, arg5)));
+	/* XXX might be just a libc wrapper, no wrapping then.  */
+        ret = wrap_restart(get_errno(pread64(arg1, p, arg3, target_offset64(arg4, arg5))));
         unlock_user(p, arg2, ret);
         break;
     case TARGET_NR_pwrite64:
@@ -9302,13 +9322,13 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
                 set = NULL;
             }
 
-            ret = get_errno(epoll_pwait(epfd, ep, maxevents, timeout, set));
+            ret = wrap_restart(get_errno(epoll_pwait(epfd, ep, maxevents, timeout, set)));
             break;
         }
 #endif
 #if defined(TARGET_NR_epoll_wait)
         case TARGET_NR_epoll_wait:
-            ret = get_errno(epoll_wait(epfd, ep, maxevents, timeout));
+            ret = wrap_restart(get_errno(epoll_wait(epfd, ep, maxevents, timeout)));
             break;
 #endif
         default:
@@ -9377,12 +9397,17 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         break;
     }
 fail:
+    if (ts->signal_restart) {
+	ts->signal_restart = 0;
+	if (ret == -TARGET_EINTR)
+	  ret = -TARGET_ERESTART;
+    }
+
 #ifdef DEBUG
     gemu_log(" = " TARGET_ABI_FMT_ld "\n", ret);
 #endif
     if(do_strace)
         print_syscall_ret(num, ret);
-    ts->signal_in_syscall = 0;
     return ret;
 efault:
     ret = -TARGET_EFAULT;

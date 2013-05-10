@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <sys/ucontext.h>
 #include <sys/resource.h>
+#include <sys/syscall.h>
 #include <sched.h>
 
 #include "qemu.h"
@@ -537,8 +538,17 @@ static void host_signal_handler(int host_signum, siginfo_t *info,
 #endif
     host_to_target_siginfo_noswap(&tinfo, info);
     if (queue_signal(env, sig, &tinfo) == 1) {
+	TaskState *ts = env->opaque;
         /* interrupt the virtual CPU as soon as possible */
         cpu_exit(thread_cpu);
+	if (ts->signal_in_syscall) {
+	    /* If we're signalled during a syscall, make really
+	       sure we're leaving that one, it might be blocking,
+	       waiting for something the handler for this signal
+	       does, so we need to deliver it before restarting
+	       the syscall.  */
+	    siglongjmp(ts->signal_buf, 1);
+	}
     }
 }
 
@@ -644,7 +654,7 @@ int do_sigaction(int sig, const struct target_sigaction *act,
         if (host_sig != SIGSEGV && host_sig != SIGBUS) {
             sigfillset(&act1.sa_mask);
             act1.sa_flags = SA_SIGINFO;
-#if defined(TARGET_ARM) || defined(TARGET_ARM64)
+#if 0 && defined(TARGET_ARM)
             /* Breaks boehm-gc, we have to do this manually */
             /*
              * Unfortunately our hacks only work as long as we don't do parallel

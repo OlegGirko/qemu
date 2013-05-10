@@ -130,6 +130,7 @@ typedef struct TaskState {
     struct emulated_sigtable sigtab[TARGET_NSIG];
     struct sigqueue sigqueue_table[MAX_SIGQUEUE_SIZE]; /* siginfo queue */
     struct sigqueue *first_free; /* first free siginfo queue entry */
+    sigjmp_buf signal_buf;
     int signal_pending; /* non zero if a signal may be pending */
     int signal_in_syscall; /* non zero if we are in do_syscall() */
     int signal_restart; /* non zero if we need to restart a syscall */
