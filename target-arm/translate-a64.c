@@ -755,15 +755,18 @@ static void handle_orr(DisasContext *s, uint32_t insn)
         break;
     }
 
+    tcg_temp_free_i64(tcg_op2);
+
     if (is_32bit) {
         tcg_gen_ext32u_i64(tcg_dest, tcg_dest);
     }
 
     if (setflags) {
-        gen_helper_pstate_add(pstate, pstate, tcg_dest, cpu_reg(31), tcg_dest);
+	if (is_32bit)
+	  gen_helper_pstate_add32(pstate, pstate, tcg_dest, cpu_reg(31), tcg_dest);
+	else
+	  gen_helper_pstate_add(pstate, pstate, tcg_dest, cpu_reg(31), tcg_dest);
     }
-
-    tcg_temp_free_i64(tcg_op2);
 }
 
 static void setflags_add(bool sub_op, bool is_32bit, TCGv_i64 src,
