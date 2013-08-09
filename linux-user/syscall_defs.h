@@ -1144,7 +1144,8 @@ struct target_winsize {
 #define TARGET_MAP_UNINITIALIZED 0x4000000	/* for anonymous mmap, memory could be uninitialized */
 #endif
 
-#if (defined(TARGET_I386) && defined(TARGET_ABI32)) || defined(TARGET_ARM) \
+#if (defined(TARGET_I386) && defined(TARGET_ABI32)) \
+    || (defined(TARGET_ARM) && defined(TARGET_ABI32)) \
     || defined(TARGET_CRIS) || defined(TARGET_UNICORE32)
 struct target_stat {
 	unsigned short st_dev;
@@ -1834,7 +1835,7 @@ struct target_stat {
 
   	abi_long	__unused[3];
 };
-#elif defined(TARGET_S390X)
+#elif defined(TARGET_S390X) || defined(TARGET_ARM64)
 struct target_stat {
     abi_ulong  st_dev;
     abi_ulong  st_ino;
@@ -1992,7 +1993,8 @@ struct target_statfs64 {
 	abi_long f_frsize;
 	abi_long f_spare[5];
 };
-#elif defined(TARGET_S390X)
+// XXX verify that this is correct
+#elif defined(TARGET_S390X) || defined(TARGET_ARM64)
 struct target_statfs {
     int32_t  f_type;
     int32_t  f_bsize;

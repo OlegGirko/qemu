@@ -4244,6 +4244,16 @@ case "$target_name" in
     bflt="yes"
     gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
   ;;
+  arm64)
+    TARGET_BASE_ARCH=arm
+    TARGET_ABI_DIR=arm
+    bflt="yes"
+    target_nptl="yes"
+    gdb_xml_files="arm-core.xml arm-vfp.xml arm-vfp3.xml arm-neon.xml"
+    #gdb_xml_files="power64-core.xml power-fpu.xml power-altivec.xml power-spe.xml"
+    target_long_alignment=8
+    target_libs_softmmu="$fdt_libs"
+  ;;
   cris)
   ;;
   lm32)
@@ -4415,6 +4425,10 @@ for i in $ARCH $TARGET_BASE_ARCH ; do
   arm)
     echo "CONFIG_ARM_DIS=y"  >> $config_target_mak
     echo "CONFIG_ARM_DIS=y"  >> config-all-disas.mak
+  ;;
+  arm64)
+    echo "CONFIG_ARM64_DIS=y"  >> $config_target_mak
+    echo "CONFIG_ARM64_DIS=y"  >> config-all-disas.mak
   ;;
   cris)
     echo "CONFIG_CRIS_DIS=y"  >> $config_target_mak

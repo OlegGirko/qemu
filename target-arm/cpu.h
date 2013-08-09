@@ -19,13 +19,20 @@
 #ifndef CPU_ARM_H
 #define CPU_ARM_H
 
-#define TARGET_LONG_BITS 32
+#include "config.h"
 
-#define ELF_MACHINE	EM_ARM
+#if defined (TARGET_ARM64)
+  /* AArch64 definitions */
+#  define TARGET_LONG_BITS 64
+  /* XXX EM_AARCH64 */
+#  define ELF_MACHINE	EM_AARCH64
+#else
+#  define TARGET_LONG_BITS 32
+#  define ELF_MACHINE	EM_ARM
+#endif
 
 #define CPUArchState struct CPUARMState
 
-#include "config.h"
 #include "qemu-common.h"
 #include "exec/cpu-defs.h"
 
@@ -79,6 +86,9 @@ struct arm_boot_info;
 typedef struct CPUARMState {
     /* Regs for current mode.  */
     uint32_t regs[16];
+    /* Regs for A64 mode.  */
+    uint64_t xregs[32];
+    uint64_t pc;
     /* Frequently accessed CPSR bits are stored separately for efficiency.
        This contains all the other bits.  Use cpsr_{read,write} to access
        the whole CPSR.  */
@@ -239,6 +249,15 @@ int cpu_arm_exec(CPUARMState *s);
 int bank_number(int mode);
 void switch_mode(CPUARMState *, int);
 uint32_t do_arm_semihosting(CPUARMState *env);
+
+static inline bool is_a64(CPUARMState *env)
+{
+#ifdef TARGET_ARM64
+    return true;
+#else
+    return false;
+#endif
+}
 
 /* you can call this signal handler from your SIGBUS and SIGSEGV
    signal handlers to inform the virtual CPU of exceptions. non zero
@@ -704,8 +723,13 @@ bool write_cpustate_to_list(ARMCPU *cpu);
 #define TARGET_PAGE_BITS 10
 #endif
 
-#define TARGET_PHYS_ADDR_SPACE_BITS 40
-#define TARGET_VIRT_ADDR_SPACE_BITS 32
+#if defined (TARGET_ARM64)
+#  define TARGET_PHYS_ADDR_SPACE_BITS 64
+#  define TARGET_VIRT_ADDR_SPACE_BITS 64
+#else
+#  define TARGET_PHYS_ADDR_SPACE_BITS 40
+#  define TARGET_VIRT_ADDR_SPACE_BITS 32
+#endif
 
 static inline CPUARMState *cpu_init(const char *cpu_model)
 {
@@ -768,9 +792,12 @@ static inline int cpu_mmu_index (CPUARMState *env)
 static inline void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
                                         target_ulong *cs_base, int *flags)
 {
+#ifdef TARGET_ARM64
+    *pc = env->pc;
+    *flags = 0;
+#else
     int privmode;
     *pc = env->regs[15];
-    *cs_base = 0;
     *flags = (env->thumb << ARM_TBFLAG_THUMB_SHIFT)
         | (env->vfp.vec_len << ARM_TBFLAG_VECLEN_SHIFT)
         | (env->vfp.vec_stride << ARM_TBFLAG_VECSTRIDE_SHIFT)
@@ -787,6 +814,9 @@ static inline void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
     if (env->vfp.xregs[ARM_VFP_FPEXC] & (1 << 30)) {
         *flags |= ARM_TBFLAG_VFPEN_MASK;
     }
+#endif
+
+    *cs_base = 0;
 }
 
 static inline bool cpu_has_work(CPUState *cpu)

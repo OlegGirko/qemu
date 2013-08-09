@@ -46,29 +46,7 @@
 
 #define ARCH(x) do { if (!ENABLE_ARCH_##x) goto illegal_op; } while(0)
 
-/* internal defines */
-typedef struct DisasContext {
-    target_ulong pc;
-    int is_jmp;
-    /* Nonzero if this instruction has been conditionally skipped.  */
-    int condjmp;
-    /* The label that will be jumped to when the instruction is skipped.  */
-    int condlabel;
-    /* Thumb-2 conditional execution bits.  */
-    int condexec_mask;
-    int condexec_cond;
-    struct TranslationBlock *tb;
-    int singlestep_enabled;
-    int thumb;
-    int bswap_code;
-#if !defined(CONFIG_USER_ONLY)
-    int user;
-#endif
-    int vfp_enabled;
-    int vec_len;
-    int vec_stride;
-} DisasContext;
-
+#include "translate.h"
 static uint32_t gen_opc_condexec_bits[OPC_BUF_SIZE];
 
 #if defined(CONFIG_USER_ONLY)
@@ -82,7 +60,7 @@ static uint32_t gen_opc_condexec_bits[OPC_BUF_SIZE];
 #define DISAS_WFI 4
 #define DISAS_SWI 5
 
-static TCGv_ptr cpu_env;
+TCGv_ptr cpu_env;
 /* We reuse the same 64-bit temporaries for efficiency.  */
 static TCGv_i64 cpu_V0, cpu_V1, cpu_M0;
 static TCGv_i32 cpu_R[16];
@@ -134,6 +112,8 @@ void arm_translate_init(void)
     cpu_exclusive_info = tcg_global_mem_new_i32(TCG_AREG0,
         offsetof(CPUARMState, exclusive_info), "exclusive_info");
 #endif
+
+    a64_translate_init();
 
 #define GEN_HELPER 2
 #include "helper.h"
@@ -10052,7 +10032,9 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
             tcg_gen_debug_insn_start(dc->pc);
         }
 
-        if (dc->thumb) {
+        if (is_a64(env)) {
+            disas_a64_insn(env, dc);
+        } else if (dc->thumb) {
             disas_thumb_insn(env, dc);
             if (dc->condexec_mask) {
                 dc->condexec_cond = (dc->condexec_cond & 0xe)
@@ -10072,7 +10054,7 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
         }
 
         if (tcg_check_temp_count()) {
-            fprintf(stderr, "TCG temporary leak before %08x\n", dc->pc);
+            fprintf(stderr, "TCG temporary leak before "TARGET_FMT_lx"\n", dc->pc);
         }
 
         /* Translation stops when a conditional branch is encountered.
@@ -10110,6 +10092,9 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
             gen_set_label(dc->condlabel);
         }
         if (dc->condjmp || !dc->is_jmp) {
+            if (is_a64(env)) {
+                gen_a64_set_pc_im(dc->pc);
+            }
             gen_set_pc_im(dc->pc);
             dc->condjmp = 0;
         }
@@ -10205,6 +10190,11 @@ void arm_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
     CPUARMState *env = &cpu->env;
     int i;
     uint32_t psr;
+
+    if (is_a64(env)) {
+        cpu_dump_state_a64(env, f, cpu_fprintf, flags);
+        return;
+    }
 
     for(i=0;i<16;i++) {
         cpu_fprintf(f, "R%02d=%08x", i, env->regs[i]);

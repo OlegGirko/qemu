@@ -30,6 +30,7 @@ static void arm_cpu_set_pc(CPUState *cs, vaddr value)
     ARMCPU *cpu = ARM_CPU(cs);
 
     cpu->env.regs[15] = value;
+    cpu->env.pc = value;
 }
 
 static void cp_reg_reset(gpointer key, gpointer value, gpointer opaque)

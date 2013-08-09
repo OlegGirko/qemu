@@ -661,7 +661,9 @@ void cpu_loop(CPUARMState *env)
 {
     CPUState *cs = CPU(arm_env_get_cpu(env));
     int trapnr;
+#ifndef TARGET_ARM64
     unsigned int n, insn;
+#endif
     target_siginfo_t info;
     uint32_t addr;
 
@@ -744,6 +746,18 @@ void cpu_loop(CPUARMState *env)
         case EXCP_SWI:
         case EXCP_BKPT:
             {
+#ifdef TARGET_ARM64
+                env->regs[0] = do_syscall(env,
+                                          env->xregs[8],
+                                          env->xregs[0],
+                                          env->xregs[1],
+                                          env->xregs[2],
+                                          env->xregs[3],
+                                          env->xregs[4],
+                                          env->xregs[5],
+                                          0, 0);
+#else
+
                 env->eabi = 1;
                 /* system call */
                 if (trapnr == EXCP_BKPT) {
@@ -821,6 +835,7 @@ void cpu_loop(CPUARMState *env)
                 } else {
                     goto error;
                 }
+#endif
             }
             break;
         case EXCP_INTERRUPT:
@@ -3887,6 +3902,16 @@ int main(int argc, char **argv, char **envp)
     cpu_x86_load_seg(env, R_FS, 0);
     cpu_x86_load_seg(env, R_GS, 0);
 #endif
+#elif defined(TARGET_ARM64)
+    // XXX
+    {
+        int i;
+        for(i = 0; i < 32; i++) {
+            env->xregs[i] = regs->regs[i];
+        }
+        env->pc = regs->pc;
+        env->xregs[31] = regs->sp;
+    }
 #elif defined(TARGET_ARM)
     {
         int i;
