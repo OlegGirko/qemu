@@ -1881,6 +1881,30 @@ out2:
     return ret;
 }
 
+#ifdef TARGET_NR_sendmmsg
+static abi_long do_sendmmsg(int fd, abi_ulong target_msgvec,
+                            unsigned int vlen, unsigned int flags)
+{
+    struct target_mmsghdr *mmsgp;
+    abi_ulong arg2 = target_msgvec;
+    int i;
+
+    if (!(mmsgp = lock_user(VERIFY_WRITE, target_msgvec,
+                            sizeof(*mmsgp) * vlen, 1))) {
+        return -TARGET_EFAULT;
+    }
+
+    for (i = 0; i < vlen; i++) {
+        mmsgp[i].msg_len = tswap32(do_sendrecvmsg(fd, arg2, flags, 1));
+        arg2 += sizeof(struct target_mmsghdr);
+    }
+
+    unlock_user(mmsgp, target_msgvec, 0);
+    /* XXX need to handle nonblocking case too */
+    return vlen;
+}
+#endif
+
 /* If we don't have a system accept4() then just call accept.
  * The callsites to do_accept4() will ensure that they don't
  * pass a non-zero flags argument in this config.
@@ -6974,6 +6998,11 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
 #ifdef TARGET_NR_sendmsg
     case TARGET_NR_sendmsg:
         ret = do_sendrecvmsg(arg1, arg2, arg3, 1);
+        break;
+#endif
+#ifdef TARGET_NR_sendmmsg
+    case TARGET_NR_sendmmsg:
+        ret = do_sendmmsg(arg1, arg2, arg3, arg4);
         break;
 #endif
 #ifdef TARGET_NR_sendto
