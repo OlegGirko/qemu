@@ -41,7 +41,7 @@ static const VMStateDescription vmstate_vfp = {
     .minimum_version_id = 2,
     .minimum_version_id_old = 2,
     .fields = (VMStateField[]) {
-        VMSTATE_FLOAT64_ARRAY(env.vfp.regs, ARMCPU, 32),
+        VMSTATE_FLOAT64_ARRAY(env.vfp.regs, ARMCPU, 64),
         /* The xregs array is a little awkward because element 1 (FPSCR)
          * requires a specific accessor, so we have to split it up in
          * the vmstate:
@@ -253,9 +253,9 @@ const VMStateDescription vmstate_arm_cpu = {
         VMSTATE_VARRAY_INT32(cpreg_vmstate_values, ARMCPU,
                              cpreg_vmstate_array_len,
                              0, vmstate_info_uint64, uint64_t),
-        VMSTATE_UINT32(env.exclusive_addr, ARMCPU),
-        VMSTATE_UINT32(env.exclusive_val, ARMCPU),
-        VMSTATE_UINT32(env.exclusive_high, ARMCPU),
+        VMSTATE_UINT64(env.exclusive_addr, ARMCPU),
+        VMSTATE_UINT64(env.exclusive_val, ARMCPU),
+        VMSTATE_UINT64(env.exclusive_high, ARMCPU),
         VMSTATE_UINT64(env.features, ARMCPU),
         VMSTATE_END_OF_LIST()
     },

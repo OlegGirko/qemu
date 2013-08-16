@@ -1187,18 +1187,21 @@ static void gen_load_exclusive(DisasContext *s, int rt, int rt2,
     tcg_gen_mov_i64(cpu_exclusive_addr, addr);
 }
 
-#ifdef CONFIG_USER_ONLY
 static void gen_store_exclusive(DisasContext *s, int rd, int rt, int rt2,
                                 TCGv_i64 addr, int size, int is_pair)
 {
+#ifdef CONFIG_USER_ONLY
     tcg_gen_mov_i64(cpu_exclusive_test, addr);
     tcg_gen_movi_i64(cpu_exclusive_info,
                      size | is_pair << 2 | (rd << 4) | (rt << 9) | (rt2 << 14));
     gen_exception_insn(s, 4, EXCP_STREX);
-}
 #else
+#ifdef TARGET_ARM64
 #error implement gen_store_exclusive for system mode (see target-arm/translate.c)
 #endif
+    gen_exception_insn(s, 4, EXCP_UDEF);
+#endif
+}
 
 static void handle_ldarx(DisasContext *s, uint32_t insn)
 {
