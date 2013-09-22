@@ -6513,6 +6513,58 @@ uint_fast16_t float32_to_uint16_round_to_zero(float32 a STATUS_PARAM)
     return res;
 }
 
+uint64_t float32_to_uint64 (float32 a STATUS_PARAM)
+{
+    flag aSign;
+    int_fast16_t aExp;
+    uint64_t res;
+
+    aExp = extractFloat32Exp(a);
+    aSign = extractFloat32Sign(a);
+
+    if (aSign) {
+	res = 0;
+	float_raise(float_flag_invalid STATUS_VAR);
+    } else {
+	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
+	   so half the value, convert to int, and double it again.  */
+	if (aExp == 0xbe)
+	  a = packFloat32(0, aExp - 1, extractFloat32Frac(a));
+
+	res = float32_to_int64(a STATUS_VAR);
+	if (aExp == 0xbe)
+	  res <<= 1;
+    }
+
+    return res;
+}
+
+uint64_t float32_to_uint64_round_to_zero (float32 a STATUS_PARAM)
+{
+    flag aSign;
+    int_fast16_t aExp;
+    uint64_t res;
+
+    aExp = extractFloat32Exp(a);
+    aSign = extractFloat32Sign(a);
+
+    if (aSign) {
+	res = 0;
+	float_raise(float_flag_invalid STATUS_VAR);
+    } else {
+	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
+	   so half the value, convert to int, and double it again.  */
+	if (aExp == 0xbe)
+	  a = packFloat32(0, aExp - 1, extractFloat32Frac(a));
+
+	res = float32_to_int64_round_to_zero(a STATUS_VAR);
+	if (aExp == 0xbe)
+	  res <<= 1;
+    }
+
+    return res;
+}
+
 uint32 float64_to_uint32( float64 a STATUS_PARAM )
 {
     int64_t v;

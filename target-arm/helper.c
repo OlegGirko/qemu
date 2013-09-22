@@ -3486,7 +3486,7 @@ VFP_CONV_FIX(sl, s, 32, 32, int32, )
 VFP_CONV_FIX(sq, s, 32, 64, int64, )
 VFP_CONV_FIX(uh, s, 32, 32, uint16, u)
 VFP_CONV_FIX(ul, s, 32, 32, uint32, u)
-VFP_CONV_FIX(uq, s, 32, 64, int64, u)
+VFP_CONV_FIX(uq, s, 32, 64, uint64, u)
 #undef VFP_CONV_FIX
 
 /* Half precision conversions.  */
