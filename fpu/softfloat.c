@@ -6525,6 +6525,9 @@ uint64_t float32_to_uint64 (float32 a STATUS_PARAM)
     if (aSign) {
 	res = 0;
 	float_raise(float_flag_invalid STATUS_VAR);
+    } else if (aExp > 0xbe) {
+        res = 0xffffffffffffffffULL;
+        float_raise(float_flag_invalid STATUS_VAR);
     } else {
 	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
 	   so half the value, convert to int, and double it again.  */
@@ -6551,6 +6554,9 @@ uint64_t float32_to_uint64_round_to_zero (float32 a STATUS_PARAM)
     if (aSign) {
 	res = 0;
 	float_raise(float_flag_invalid STATUS_VAR);
+    } else if (aExp > 0xbe) {
+        res = 0xffffffffffffffffULL;
+        float_raise(float_flag_invalid STATUS_VAR);
     } else {
 	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
 	   so half the value, convert to int, and double it again.  */
@@ -6649,6 +6655,9 @@ uint64_t float64_to_uint64 (float64 a STATUS_PARAM)
     if (aSign) {
 	res = 0;
 	float_raise( float_flag_invalid STATUS_VAR);
+    } else if (aExp > 0x43e) {
+        res = 0xffffffffffffffffULL;
+        float_raise(float_flag_invalid STATUS_VAR);
     } else {
 	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
 	   so half the value, convert to int, and double it again.  */
@@ -6675,6 +6684,9 @@ uint64_t float64_to_uint64_round_to_zero (float64 a STATUS_PARAM)
     if (aSign) {
 	res = 0;
 	float_raise( float_flag_invalid STATUS_VAR);
+    } else if (aExp > 0x43e) {
+        res = 0xffffffffffffffffULL;
+        float_raise(float_flag_invalid STATUS_VAR);
     } else {
 	/* If a > 2^63 (but < 2^64) it won't fit into a signed int,
 	   so half the value, convert to int, and double it again.  */
