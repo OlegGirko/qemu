@@ -541,6 +541,9 @@ static void host_signal_handler(int host_signum, siginfo_t *info,
 	TaskState *ts = env->opaque;
         /* interrupt the virtual CPU as soon as possible */
         cpu_exit(thread_cpu);
+#if 0
+	/* This doesn't really work.  We can loose return values
+	   from the syscall we try to break here.  */
 	if (ts->signal_in_syscall) {
 	    /* If we're signalled during a syscall, make really
 	       sure we're leaving that one, it might be blocking,
@@ -549,6 +552,7 @@ static void host_signal_handler(int host_signum, siginfo_t *info,
 	       the syscall.  */
 	    siglongjmp(ts->signal_buf, 1);
 	}
+#endif
     }
 }
 
@@ -665,8 +669,8 @@ int do_sigaction(int sig, const struct target_sigaction *act,
             if ((k->sa_flags & TARGET_SA_RESTART) && host_sig == SIGPWR)
 		pin_to_one_cpu ();
 #else
-            if (k->sa_flags & TARGET_SA_RESTART)
-                act1.sa_flags |= SA_RESTART;
+            /*if (k->sa_flags & TARGET_SA_RESTART)
+                act1.sa_flags |= SA_RESTART;*/
 #endif
             /* NOTE: it is important to update the host kernel signal
                ignore state to avoid getting unexpected interrupted
