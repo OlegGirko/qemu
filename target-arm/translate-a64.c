@@ -2796,6 +2796,15 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
                 tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
             }
             break;
+	case 0x12: /* MLA / MLS */
+	    tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
+	    simd_ld(tcg_op1, freg_offs_d + i, size, !is_u);
+	    if (is_u) {
+		tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_res);
+	    } else {
+		tcg_gen_add_i64(tcg_res, tcg_op1, tcg_res);
+	    }
+	    break;
 	case 0x13: /* MUL / PMUL */
 	    if (is_u) {
 		gen_helper_neon_mul_p8 (tcg_res, tcg_op1, tcg_op2);
