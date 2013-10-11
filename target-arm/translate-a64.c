@@ -3576,6 +3576,161 @@ static void handle_simdldstm(DisasContext *s, uint32_t insn, bool is_wback)
     tcg_temp_free_i64(tcg_addr);
 }
 
+static void handle_simdldsts(DisasContext *s, uint32_t insn)
+{
+    int rt = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 5);
+    int size = get_bits(insn, 10, 2);
+    int opcode = get_bits(insn, 13, 3);
+    int is_s = get_bits(insn, 12, 1);
+    int is_r = get_bits(insn, 21, 1);
+    bool is_load = get_bits(insn, 22, 1);
+    bool is_q = get_bits(insn, 30, 1);
+    bool is_wback = get_bits(insn, 23, 1);
+    TCGv_i64 tcg_tmp = tcg_temp_new_i64();
+    TCGv_i64 tcg_addr = tcg_temp_new_i64();
+    int xs, tt;
+    int scale = opcode >> 1;
+    int selem = 1 + (((opcode & 1) << 1) | is_r);
+    bool replicate = false;
+    int indx;
+    int esize, ebytes;
+
+    if (!is_wback && rm) {
+	unallocated_encoding(s);
+	return;
+    }
+    switch (scale) {
+    case 3:
+	/* Load and replicate.  */
+	if (!is_load || is_s) {
+	    unallocated_encoding(s);
+	    return;
+	}
+	scale = size;
+	replicate = true;
+	break;
+    case 0:
+	indx = size | (is_s << 2) | ((int)is_q << 3);
+	break;
+    case 1:
+	if (size & 1) {
+	    unallocated_encoding(s);
+	    return;
+	}
+	indx = (size >> 1) | (is_s << 1) | ((int)is_q << 2);
+	break;
+    case 2:
+	if (size & 2) {
+	    unallocated_encoding(s);
+	    return;
+	}
+	if (size & 1) {
+	    if (is_s) {
+		unallocated_encoding(s);
+		return;
+	    }
+	    indx = (int)is_q;
+	    scale = 3;
+	} else {
+	    indx = is_s | ((int)is_q << 1);
+	}
+	break;
+    }
+    esize = 8 << scale;
+    ebytes = esize >> 3;
+
+    tcg_gen_mov_i64(tcg_addr, cpu_reg_sp(rn));
+
+    if (replicate) {
+	/* Load and replicate to all elements.  */
+	tt = rt;
+	for (xs = 0; xs < selem; xs++) {
+	    int freg_offs = offsetof(CPUARMState, vfp.regs[tt * 2]);
+	    switch (scale) {
+            case 0x0:
+		tcg_gen_qemu_ld8u(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_muli_i64(tcg_tmp, tcg_tmp, 0x0101010101010101);
+		break;
+	    case 0x1:
+		tcg_gen_qemu_ld16u(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_muli_i64(tcg_tmp, tcg_tmp, 0x0001000100010001);
+		break;
+	    case 0x2:
+		tcg_gen_qemu_ld32u(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_muli_i64(tcg_tmp, tcg_tmp, 0x0000000100000001);
+		break;
+	    case 0x3:
+		tcg_gen_qemu_ld64(tcg_tmp, tcg_addr, get_mem_index(s));
+		break;
+	    }
+	    tcg_gen_st_i64(tcg_tmp, cpu_env, freg_offs);
+	    if (is_q)
+	      tcg_gen_st_i64(tcg_tmp, cpu_env, freg_offs + sizeof(uint64_t));
+	    tt = (tt + 1) & 31;
+	    tcg_gen_addi_i64(tcg_addr, tcg_addr, ebytes);
+	}
+    } else {
+	/* Load/store one element per register.  */
+	tt = rt;
+	for (xs = 0; xs < selem; xs++) {
+	    int freg_offs = offsetof(CPUARMState, vfp.regs[tt * 2]) +
+		(indx * ebytes);
+
+	    /* XXX merge with ldst_do_vec() */
+	    switch (scale | (is_load << 4)) {
+	    case 0x0:
+		tcg_gen_ld8u_i64(tcg_tmp, cpu_env, freg_offs);
+		tcg_gen_qemu_st8(tcg_tmp, tcg_addr, get_mem_index(s));
+		break;
+	    case 0x1:
+		tcg_gen_ld16u_i64(tcg_tmp, cpu_env, freg_offs);
+		tcg_gen_qemu_st16(tcg_tmp, tcg_addr, get_mem_index(s));
+		break;
+	    case 0x2:
+		tcg_gen_ld32u_i64(tcg_tmp, cpu_env, freg_offs);
+		tcg_gen_qemu_st32(tcg_tmp, tcg_addr, get_mem_index(s));
+		break;
+	    case 0x3:
+		tcg_gen_ld_i64(tcg_tmp, cpu_env, freg_offs);
+		tcg_gen_qemu_st64(tcg_tmp, tcg_addr, get_mem_index(s));
+		break;
+	    case 0x10:
+		tcg_gen_qemu_ld8u(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_st8_i64(tcg_tmp, cpu_env, freg_offs);
+		break;
+	    case 0x11:
+		tcg_gen_qemu_ld16u(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_st16_i64(tcg_tmp, cpu_env, freg_offs);
+		break;
+	    case 0x12:
+		tcg_gen_qemu_ld32u(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs);
+		break;
+	    case 0x13:
+		tcg_gen_qemu_ld64(tcg_tmp, tcg_addr, get_mem_index(s));
+		tcg_gen_st_i64(tcg_tmp, cpu_env, freg_offs);
+		break;
+	    }
+
+	    tcg_gen_addi_i64(tcg_addr, tcg_addr, ebytes);
+	    tt = (tt + 1) & 31;
+	}
+    }
+
+    if (is_wback) {
+        if (rm == 31) {
+            tcg_gen_mov_i64(cpu_reg_sp(rn), tcg_addr);
+        } else {
+            tcg_gen_add_i64(cpu_reg_sp(rn), cpu_reg(rn), cpu_reg(rm));
+        }
+    }
+
+    tcg_temp_free_i64(tcg_tmp);
+    tcg_temp_free_i64(tcg_addr);
+}
+
 static void handle_dupg(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
@@ -3757,6 +3912,8 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
     case 0x0d:
         if (get_bits(insn, 29, 1)) {
             handle_stp(s, insn);
+	} else if (!get_bits(insn, 31, 1)) {
+	    handle_simdldsts(s, insn);
         } else {
             goto unknown_insn;
         }
