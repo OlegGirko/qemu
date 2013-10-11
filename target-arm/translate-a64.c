@@ -2910,6 +2910,56 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_res);
 }
 
+/* SIMD 3 different */
+static void handle_simd3d(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 5);
+    int size = get_bits(insn, 22, 2);
+    int opcode = get_bits(insn, 12, 4);
+    bool is_q = get_bits(insn, 30, 1);
+    bool is_u = get_bits(insn, 29, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    int ebytes = (1 << size);
+    int elements = 8 / ebytes;
+    int e;
+
+    if (size == 3) {
+	unallocated_encoding(s);
+	return;
+    }
+
+    if (is_q) {
+	freg_offs_n += sizeof(uint64_t);
+	freg_offs_m += sizeof(uint64_t);
+    }
+
+    for (e = 0; e < elements; e++) {
+        simd_ld(tcg_op1, freg_offs_n + e * ebytes, size, !is_u);
+        simd_ld(tcg_op2, freg_offs_m + e * ebytes, size, !is_u);
+
+        switch (opcode) {
+	case 0xc: /* SMULL / UMULL */
+	    tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
+	    break;
+	default:
+	    unallocated_encoding(s);
+	    break;
+	}
+	simd_st(tcg_res, freg_offs_d + 2 * e * ebytes, size+1);
+    }
+
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_op2);
+    tcg_temp_free_i64(tcg_res);
+}
+
 /* SIMD ZIP/UZP/TRN */
 static void handle_simd_zip(DisasContext *s, uint32_t insn)
 {
@@ -3959,6 +4009,8 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 	      handle_simdorr(s, insn);
 	    else
 	      handle_simd3su0(s, insn);
+	} else if (get_bits(insn, 21, 1) && !get_bits(insn, 10, 2)) {
+	    handle_simd3d(s, insn);
 	} else if (get_bits(insn, 17, 5) == 0x18 &&
 		   get_bits(insn, 11, 1) && !get_bits(insn, 10, 1)) {
 	    handle_simd_accross(s, insn);
