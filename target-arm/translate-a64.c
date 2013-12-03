@@ -3230,7 +3230,43 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
 	    simd_st(tcg_res, freg_offs_d + sizeof(float64), 3);
 	}
 	break;
-
+    case 0x0b: /* NEG */
+	{
+	  bool is_scalar = get_bits(insn, 28, 1);
+	  if (is_scalar) {
+	      if (size != 3) {
+		  unallocated_encoding(s);
+		  return;
+	      }
+	      simd_ld(tcg_op1, freg_offs_n, 3, false);
+	      tcg_gen_neg_i64(tcg_res, tcg_op1);
+	      simd_st(tcg_res, freg_offs_d, 3);
+	  } else {
+	      TCGv_i64 zero = tcg_temp_new_i64();
+	      zero = tcg_const_i64(0);
+	      for (i = 0; i < (is_q ? 16 : 8); i += ebytes)
+	      {
+		  simd_ld(tcg_op1, freg_offs_n + i, size, true);
+		  switch (size) {
+		  case 0: /* bytes */
+		      gen_helper_neon_sub_u8(tcg_res, zero, tcg_op1);
+		      break;
+		  case 1: /* halfwords.  */
+		      gen_helper_neon_sub_u16(tcg_res, zero, tcg_op1);
+		      break;
+		  case 2: /* words.  */
+		      tcg_gen_sub_i32(tcg_res, zero, tcg_op1);
+		      break;
+		  case 3: /* doublewords.  */
+		      tcg_gen_sub_i64(tcg_res, zero, tcg_op1);
+		      break;
+		  }
+		  simd_st(tcg_res, freg_offs_d + i, size);
+	      }
+	      tcg_temp_free_i64(zero);
+	  }
+	}
+	break;
     default:
 	unallocated_encoding(s);
 	return;
