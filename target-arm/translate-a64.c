@@ -3339,7 +3339,7 @@ static void handle_simdmovi(DisasContext *s, uint32_t insn)
         } else if (!(cmode & 1) && is_neg) {
             imm = 0;
             for (i = 0; i < 8; i++) {
-                if ((abcdefgh) & (1 << (7 - i))) {
+                if ((abcdefgh) & (1 << i)) {
                     imm |= 0xffULL << (i * 8);
                 }
             }
