@@ -2735,8 +2735,8 @@ static void handle_simdorr(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_res_2);
 }
 
-/* SIMD 3 same (U=0) */
-static void handle_simd3su0(DisasContext *s, uint32_t insn)
+/* SIMD 3 same */
+static void handle_simd3s(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
@@ -2762,6 +2762,13 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 	if (is_u && size != 0) {
 	    /* PMUL is only defined for bytes.  */
 	    unallocated_encoding(s);
+	    return;
+	}
+	break;
+    case 0x1f: /* FDIV / FRSQRTS / FRECPS */
+	if (!is_u || (size & 2) != 0) {
+	    /* Can't handle FRSQRTS / FRECPS yet.  */
+	    unallocated_encoding (s);
 	    return;
 	}
 	break;
@@ -2874,6 +2881,24 @@ static void handle_simd3su0(DisasContext *s, uint32_t insn)
 	      tcg_temp_free_ptr(fpst);
 	      break;
 	    }
+
+	case 0x1f: /* FDIV */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+
+	      if (!is_q && size == 1) {
+		  unallocated_encoding(s);
+		  return;
+	      }
+	      if (size == 0) {
+		  gen_helper_vfp_divs(tcg_res, tcg_op1, tcg_op2, fpst);
+	      } else {
+		  gen_helper_vfp_divd(tcg_res, tcg_op1, tcg_op2, fpst);
+	      }
+	      
+	      tcg_temp_free_ptr(fpst);
+	    }
+	    break;
 
 	case 0x08: /* SSHL / USHL */
 	case 0x09: /* SQSHL / UQSHL (saturating) */
@@ -4046,7 +4071,7 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 	    if (get_bits(insn, 11, 5) == 0x3)
 	      handle_simdorr(s, insn);
 	    else
-	      handle_simd3su0(s, insn);
+	      handle_simd3s(s, insn);
 	} else if (get_bits(insn, 21, 1) && !get_bits(insn, 10, 2)) {
 	    handle_simd3d(s, insn);
 	} else if (get_bits(insn, 17, 5) == 0x18 &&
