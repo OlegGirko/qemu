@@ -3376,14 +3376,16 @@ static void handle_simdmovi(DisasContext *s, uint32_t insn)
     if ((cmode == 0xf) && is_neg && !is_q) {
         unallocated_encoding(s);
         return;
-    } else if ((cmode & 1) && is_neg) {
-        /* AND (BIC) */
-        tcg_gen_and_i64(tcg_res_1, tcg_op1_1, tcg_imm);
-        tcg_gen_and_i64(tcg_res_2, tcg_op1_2, tcg_imm);
-    } else if ((cmode & 1) && !is_neg) {
-        /* ORR */
-        tcg_gen_or_i64(tcg_res_1, tcg_op1_1, tcg_imm);
-        tcg_gen_or_i64(tcg_res_2, tcg_op1_2, tcg_imm);
+    } else if ((cmode & 0x9) == 0x1 || (cmode & 0xd) == 0x9) {
+	if (is_neg) {
+            /* AND (BIC) */
+            tcg_gen_and_i64(tcg_res_1, tcg_op1_1, tcg_imm);
+            tcg_gen_and_i64(tcg_res_2, tcg_op1_2, tcg_imm);
+	} else {
+            /* ORR */
+            tcg_gen_or_i64(tcg_res_1, tcg_op1_1, tcg_imm);
+            tcg_gen_or_i64(tcg_res_2, tcg_op1_2, tcg_imm);
+	}
     } else {
         /* MOVI */
         tcg_gen_mov_i64(tcg_res_1, tcg_imm);
