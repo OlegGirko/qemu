@@ -2626,6 +2626,100 @@ static void handle_v3add(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_res);
 }
 
+/* SIMD scalar pairwise, floating point single precision.  */
+
+static void handle_scpsp(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int opcode = get_bits(insn, 12, 5);
+    int size = get_bits(insn, 22, 2);
+    int esize = 4 << size;
+    int is_u = get_bits(insn, 29, 1);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    TCGv_i32 tcg_op1 = tcg_temp_new_i32();
+    TCGv_i32 tcg_op2 = tcg_temp_new_i32();
+    TCGv_i32 tcg_res = tcg_temp_new_i32();
+    TCGv_i64 tcg_tmp = tcg_temp_new_i64();
+    TCGv_ptr fpst = get_fpstatus_ptr();
+    
+    tcg_gen_ld_i64(tcg_tmp, cpu_env, freg_offs_n);
+    tcg_gen_trunc_i64_i32(tcg_op1, tcg_tmp);
+    tcg_gen_ld_i64(tcg_tmp, cpu_env, freg_offs_n + esize);
+    tcg_gen_trunc_i64_i32(tcg_op2, tcg_tmp);
+    
+    switch (opcode) {
+    case 0x0d: /* FADDP */
+	if (!is_u || (size & 0x2) != 0) {
+	    unallocated_encoding(s);
+	    return;
+	}
+	gen_helper_vfp_adds(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x0f: /* FMINP / FMAXP */
+    case 0x0c: /* FMINNMP / FMAXNMP */
+	/* Unimplemented (fallthrough).  */
+    default:
+	unallocated_encoding(s);
+	return;
+    }
+
+    clear_fpreg(rd);
+    tcg_gen_ext32u_i64(tcg_tmp, tcg_res);
+    tcg_gen_st32_i64(tcg_tmp, cpu_env, freg_offs_d);
+
+    tcg_temp_free_ptr(fpst);
+    tcg_temp_free_i32(tcg_op1);
+    tcg_temp_free_i32(tcg_op2);
+    tcg_temp_free_i32(tcg_res);
+}
+
+/* SIMD scalar pairwise, floating point double precision.  */
+
+static void handle_scpdp(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int opcode = get_bits(insn, 12, 5);
+    int size = get_bits(insn, 22, 2);
+    int esize = 4 << size;
+    int is_u = get_bits(insn, 29, 1);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    TCGv_ptr fpst = get_fpstatus_ptr();
+    
+    tcg_gen_ld_i64(tcg_op1, cpu_env, freg_offs_n);
+    tcg_gen_ld_i64(tcg_op2, cpu_env, freg_offs_n + esize);
+    
+    switch (opcode) {
+    case 0x0d: /* FADDP */
+	if (!is_u || (size & 0x2) != 0) {
+	    unallocated_encoding(s);
+	    return;
+	}
+	gen_helper_vfp_addd(tcg_res, tcg_op1, tcg_op2, fpst);
+	break;
+    case 0x0f: /* FMINP / FMAXP */
+    case 0x0c: /* FMINNMP / FMAXNMP */
+	/* Unimplemented (fallthrough).  */
+    default:
+	unallocated_encoding(s);
+	return;
+    }
+
+    clear_fpreg(rd);
+    tcg_gen_st_i64(tcg_res, cpu_env, freg_offs_d);
+
+    tcg_temp_free_ptr(fpst);
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_op2);
+    tcg_temp_free_i64(tcg_res);
+}
+
 /* SIMD logical ops (three same, opcode 3) */
 static void handle_simdorr(DisasContext *s, uint32_t insn)
 {
@@ -4242,6 +4336,17 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
         } else if ((get_bits(insn, 30, 2) == 0x1) && get_bits(insn, 21, 1) &&
                    (get_bits(insn, 10, 6) == 0x21)) {
             handle_v3add(s, insn);
+	} else if (get_bits(insn, 30, 2) == 0x1 &&
+		   get_bits(insn, 17, 5) == 0x18 &&
+		   get_bits(insn, 10, 2) == 0x2) {
+	    if (get_bits(insn, 12, 5) == 0x1b) {
+		/* ADDP unsupported.  */
+		goto unknown_insn;
+	    } else if (get_bits (insn, 22, 1)) {
+		handle_scpdp (s, insn);
+	    } else {
+		handle_scpsp (s, insn);
+	    }
         } else {
             goto unknown_insn;
         }
