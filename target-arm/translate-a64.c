@@ -2848,6 +2848,8 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
     TCGv_i64 tcg_op1 = tcg_temp_new_i64();
     TCGv_i64 tcg_op2 = tcg_temp_new_i64();
     TCGv_i64 tcg_res = tcg_temp_new_i64();
+    TCGv_i64 tcg_acc;
+    bool uses_accum = false;
     int ebytes = (1 << size);
     int i;
 
@@ -2859,8 +2861,16 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    return;
 	}
 	break;
-    case 0x1b: /* FMUL / FMULX */
+    case 0x19: /* FMLA / FMLS */
+	tcg_acc = tcg_temp_new_i64();
+	uses_accum = true;
 	/* Fallthrough */
+    case 0x1b: /* FMUL / FMULX */
+	is_op2 = size & 2;
+	size = (size & 1) + 2;
+	ebytes = (1 << size);
+	is_u = true;
+	break;
     case 0x1f: /* FDIV / FRSQRTS / FRECPS */
 	if (!is_u || (size & 2) != 0) {
 	    /* Can't handle FRSQRTS / FRECPS yet.  */
@@ -2950,6 +2960,42 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    tcg_gen_subi_i64 (tcg_res, tcg_res, 1);
 	    break;
 
+	case 0x19: /* FMLA / FMLS */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+	      
+	      if (!is_q && size == 3) {
+		  unallocated_encoding(s);
+		  return;
+	      }
+
+	      simd_ld(tcg_acc, freg_offs_d + i, size, !is_u);
+
+	      /* These are fused multiply-add operations, so use the
+		 appropriate fused-op VFP helpers. */
+
+	      if (is_op2) {
+		  if (size == 2) {
+		      gen_helper_vfp_mulsubs(tcg_res, tcg_op1, tcg_op2, tcg_acc,
+					     fpst);
+		  } else {
+		      gen_helper_vfp_mulsubd(tcg_res, tcg_op1, tcg_op2, tcg_acc,
+					     fpst);
+		  }
+	      } else {
+		  if (size == 2) {
+		      gen_helper_vfp_muladds(tcg_res, tcg_op1, tcg_op2, tcg_acc,
+					     fpst);
+		  } else {
+		      gen_helper_vfp_muladdd(tcg_res, tcg_op1, tcg_op2, tcg_acc,
+					     fpst);
+		  }
+	      }
+	      
+	      tcg_temp_free_ptr (fpst);
+	    }
+	    break;
+
 	case 0x1a: /* FADD / FADDP / FSUB / FABD */
 	    {
 	      TCGv_ptr fpst = get_fpstatus_ptr();
@@ -2982,11 +3028,11 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    {
 	      TCGv_ptr fpst = get_fpstatus_ptr();
 	      
-	      if (!is_q && size == 1) {
+	      if (!is_q && size == 3) {
 		  unallocated_encoding(s);
 		  return;
 	      }
-	      if (size == 0) {
+	      if (size == 2) {
 		  gen_helper_vfp_muls(tcg_res, tcg_op1, tcg_op2, fpst);
 	      } else {
 		  gen_helper_vfp_muld(tcg_res, tcg_op1, tcg_op2, fpst);
@@ -3047,6 +3093,9 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_op1);
     tcg_temp_free_i64(tcg_op2);
     tcg_temp_free_i64(tcg_res);
+    if (uses_accum) {
+	tcg_temp_free_i64(tcg_acc);
+    }
 }
 
 /* SIMD 3 different */

@@ -3794,3 +3794,16 @@ float64 VFP_HELPER(muladd, d)(float64 a, float64 b, float64 c, void *fpstp)
     float_status *fpst = fpstp;
     return float64_muladd(a, b, c, 0, fpst);
 }
+
+/* ARMv8 fused multiply-subtract */
+float32 VFP_HELPER(mulsub, s)(float32 a, float32 b, float32 c, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    return float32_muladd(a, b, c, float_muladd_negate_product, fpst);
+}
+
+float64 VFP_HELPER(mulsub, d)(float64 a, float64 b, float64 c, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    return float64_muladd(a, b, c, float_muladd_negate_product, fpst);
+}
