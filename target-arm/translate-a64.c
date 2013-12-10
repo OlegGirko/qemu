@@ -2877,6 +2877,9 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    unallocated_encoding (s);
 	    return;
 	}
+	size = (size & 1) + 2;
+	ebytes = (1 << size);
+	is_u = true;
 	break;
 	       /* base / pair  / sz&2 / sz&2 && pair */
     case 0x1a: /* FADD / FADDP / FSUB / FABD */
@@ -3046,11 +3049,11 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    {
 	      TCGv_ptr fpst = get_fpstatus_ptr();
 
-	      if (!is_q && size == 1) {
+	      if (!is_q && size == 3) {
 		  unallocated_encoding(s);
 		  return;
 	      }
-	      if (size == 0) {
+	      if (size == 2) {
 		  gen_helper_vfp_divs(tcg_res, tcg_op1, tcg_op2, fpst);
 	      } else {
 		  gen_helper_vfp_divd(tcg_res, tcg_op1, tcg_op2, fpst);
