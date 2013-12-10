@@ -2859,6 +2859,8 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    return;
 	}
 	break;
+    case 0x1b: /* FMUL / FMULX */
+	/* Fallthrough */
     case 0x1f: /* FDIV / FRSQRTS / FRECPS */
 	if (!is_u || (size & 2) != 0) {
 	    /* Can't handle FRSQRTS / FRECPS yet.  */
@@ -2973,8 +2975,26 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	      }
 
 	      tcg_temp_free_ptr(fpst);
-	      break;
 	    }
+	    break;
+
+	case 0x1b: /* FMUL */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+	      
+	      if (!is_q && size == 1) {
+		  unallocated_encoding(s);
+		  return;
+	      }
+	      if (size == 0) {
+		  gen_helper_vfp_muls(tcg_res, tcg_op1, tcg_op2, fpst);
+	      } else {
+		  gen_helper_vfp_muld(tcg_res, tcg_op1, tcg_op2, fpst);
+	      }
+	      
+	      tcg_temp_free_ptr(fpst);
+	    }
+	    break;
 
 	case 0x1f: /* FDIV */
 	    {
