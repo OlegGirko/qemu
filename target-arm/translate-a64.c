@@ -3535,18 +3535,28 @@ static void handle_simdmovi(DisasContext *s, uint32_t insn)
                 }
             }
         } else if (cmode & 1) {
-            shift = is_neg ? 48 : 19;
-            imm = (abcdefgh & 0x1f) << 19;
-            if (abcdefgh & 0x80) {
-                imm |= 0x80000000;
-            }
-            if (!(abcdefgh & 0x40)) {
-                imm |= 0x40000000;
-            }
-            if (abcdefgh & 0x20) {
-                imm |= is_neg ? 0x3fc00000 : 0x3e000000;
-            }
-            imm |= (imm << 32);
+	    if (is_neg) {
+		imm = (abcdefgh & 0x3f) << 48;
+		if (abcdefgh & 0x80) {
+		    imm |= 0x8000000000000000;
+		}
+        	if (abcdefgh & 0x40) {
+                    imm |= 0x3fc0000000000000;
+        	} else {
+		    imm |= 0x4000000000000000;
+		}
+	    } else {
+        	imm = (abcdefgh & 0x3f) << 19;
+        	if (abcdefgh & 0x80) {
+                    imm |= 0x80000000;
+        	}
+        	if (abcdefgh & 0x40) {
+                    imm |= 0x3e000000;
+		} else {
+                    imm |= 0x40000000;
+        	}
+        	imm |= (imm << 32);
+	    }
         }
         shift = ((cmode >> 1) & 0x1) * 8;
         break;
