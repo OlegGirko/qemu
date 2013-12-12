@@ -3224,8 +3224,8 @@ static void handle_simd_zip(DisasContext *s, uint32_t insn)
 	break;
     case 3: /* ZIP1/2 */
 	if (part) {
-	    freg_offs_n += sizeof(float64);
-	    freg_offs_m += sizeof(float64);
+	    freg_offs_n += ebytes * elements / 2;
+	    freg_offs_m += ebytes * elements / 2;
 	}
 	for (i = 0; i < elements; i++) {
 	    if (i & 1)
