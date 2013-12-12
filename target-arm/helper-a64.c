@@ -346,12 +346,13 @@ void HELPER(simd_tbl)(CPUARMState *env, uint32_t insn)
     int rd = get_bits(insn, 0, 5);
     int rn = get_bits(insn, 5, 5);
     int rm = get_bits(insn, 16, 5);
-    bool is_tbl = get_bits(insn, 12, 1);
+    bool is_tbx = get_bits(insn, 12, 1);
     int len = get_bits(insn, 13, 2);
     bool is_q = get_bits(insn, 30, 1);
     int shift, pass;
     int regs = len + 1;
     uint64_t indices;
+    uint64_t res[2];
 
     for (pass = 0; pass < (is_q ? 2 : 1); pass++) {
 	indices = env->vfp.regs[rm * 2 + pass];
@@ -367,14 +368,14 @@ void HELPER(simd_tbl)(CPUARMState *env, uint32_t insn)
 		  tabelem -= 64;
 		tmp = env->vfp.regs[tabelem] >> ((index & 7) << 3) & 0xff;
 		val |= tmp << shift;
-	    } else if (!is_tbl) {
+	    } else if (is_tbx) {
 		val |= env->vfp.regs[rd * 2 + pass] & (0xffUL << shift);
 	    }
 	}
-	env->vfp.regs[rd * 2 + pass] = val;
+	res[pass] = val;
     }
-    if (!is_q)
-      env->vfp.regs[rd * 2 + 1] = 0;
+    env->vfp.regs[rd * 2] = res[0];
+    env->vfp.regs[rd * 2 + 1] = is_q ? res[1] : 0;
 }
 
 void HELPER(cmp_addr)(uint64_t addr, uint64_t pc, uint32_t insn)
