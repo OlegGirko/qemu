@@ -4076,6 +4076,40 @@ static void handle_dupg(DisasContext *s, uint32_t insn)
     }
 }
 
+static void handle_dup_elem(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int imm5 = get_bits(insn, 16, 5);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int size = ctz32(imm5);
+    int esize = 1 << size;
+    int is_q = get_bits(insn, 30, 1);
+    int index, i;
+    TCGv_i64 tmp = tcg_temp_new_i64();
+
+    if (size > 3 || (size == 3 && !is_q)) {
+	unallocated_encoding(s);
+	return;
+    }
+    
+    index = imm5 >> (size + 1);
+    
+    simd_ld(tmp, freg_offs_n + esize * index, size, false);
+    
+    for (i = 0; i < (is_q ? 16 : 8); i += esize) {
+	simd_st(tmp, freg_offs_d + i, size);
+    }
+    
+    if (!is_q) {
+	tcg_gen_movi_i64(tmp, 0);
+	tcg_gen_st_i64(tmp, cpu_env, freg_offs_d + sizeof(float64));
+    }
+    
+    tcg_temp_free_i64(tmp);
+}
+
 static void handle_umov_smov(DisasContext *s, uint32_t insn)
 {
     int rd = get_bits(insn, 0, 5);
@@ -4239,6 +4273,8 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 		  handle_insg(s, insn);
 		  break;
 	      case 0x0: /* DUP element */
+		  handle_dup_elem(s, insn);
+		  break;
 	      default:
 		  goto unknown_insn;
 	      }
