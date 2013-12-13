@@ -224,7 +224,6 @@ typedef struct CPUARMState {
         uint32_t control;
         int current_sp;
         int exception;
-        int pending_exception;
     } v7m;
 
     /* Thumb-2 EE state.  */
