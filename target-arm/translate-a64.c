@@ -3136,6 +3136,12 @@ static void handle_simd3d(DisasContext *s, uint32_t insn)
         simd_ld(tcg_op2, freg_offs_m + e * ebytes, size, !is_u);
 
         switch (opcode) {
+	case 0x0: /* SADDL / SADDL2 / UADDL / UADDL2 */
+	    tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
+	    break;
+	case 0x2: /* SSUBL / SSUBL2 / USUBL / USUBL2 */
+	    tcg_gen_sub_i64(tcg_res, tcg_op1, tcg_op2);
+	    break;
 	case 0xc: /* SMULL / UMULL */
 	    tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
 	    break;
