@@ -2851,7 +2851,7 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
     TCGv_i64 tcg_acc;
     bool uses_accum = false;
     int ebytes = (1 << size);
-    int i;
+    int i, cmp;
 
     switch (opcode) {
     case 0x13: /* MUL / PMUL */
@@ -2867,6 +2867,12 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	/* Fallthrough */
     case 0x1b: /* FMUL / FMULX */
 	is_op2 = size & 2;
+	size = (size & 1) + 2;
+	ebytes = (1 << size);
+	is_u = true;
+	break;
+    case 0x1c: /* FCMEQ / FCMGE / FCMGT */
+	cmp = (size & 2) | is_u;
 	size = (size & 1) + 2;
 	ebytes = (1 << size);
 	is_u = true;
@@ -3039,6 +3045,41 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 		  gen_helper_vfp_muls(tcg_res, tcg_op1, tcg_op2, fpst);
 	      } else {
 		  gen_helper_vfp_muld(tcg_res, tcg_op1, tcg_op2, fpst);
+	      }
+	      
+	      tcg_temp_free_ptr(fpst);
+	    }
+	    break;
+
+	case 0x1c: /* FCMEQ / FCMGE / FCMGT */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+
+	      switch (cmp) {
+	      case 0: /* EQ */
+		  if (size == 2) {
+		      gen_helper_neon_ceq_f32(tcg_res, tcg_op1, tcg_op2, fpst);
+		  } else {
+		      gen_helper_neon_ceq_f64(tcg_res, tcg_op1, tcg_op2, fpst);
+		  }
+		  break;
+	      case 1: /* GE */
+		  if (size == 2) {
+		      gen_helper_neon_cge_f32(tcg_res, tcg_op1, tcg_op2, fpst);
+		  } else {
+		      gen_helper_neon_cge_f64(tcg_res, tcg_op1, tcg_op2, fpst);
+		  }
+		  break;
+	      case 3: /* GT */
+		  if (size == 2) {
+		      gen_helper_neon_cgt_f32(tcg_res, tcg_op1, tcg_op2, fpst);
+		  } else {
+		      gen_helper_neon_cgt_f64(tcg_res, tcg_op1, tcg_op2, fpst);
+		  }
+		  break;
+	      default:
+		  unallocated_encoding(s);
+		  return;
 	      }
 	      
 	      tcg_temp_free_ptr(fpst);
@@ -3462,6 +3503,75 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
 	      }
 	      tcg_temp_free_i64(zero);
 	  }
+	}
+	break;
+    case 0x0c: /* FCMGT / FCMGE */
+    case 0x0d: /* FCMEQ / FCMLE */
+    case 0x0e: /* FCMLT */
+	{
+	  /* Only the vector variants of these instructions are handled
+	     here.  */
+	  TCGv_ptr fpst = get_fpstatus_ptr();
+	  TCGv_i64 zero = tcg_temp_new_i64();
+	  /* Floating-point zero happens to look the same as integer zero.  */
+	  zero = tcg_const_i64(0);
+
+	  if (size == 3 && !is_q) {
+	      unallocated_encoding(s);
+	      return;
+	  }
+
+	  for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
+	      simd_ld(tcg_op1, freg_offs_n + i, size, false);
+
+	      switch (opcode) {
+	      case 0x0c:
+		  if (is_u) {
+		      /* GE */
+		      if (size == 2) {
+			  gen_helper_neon_cge_f32(tcg_res, tcg_op1, zero, fpst);
+		      } else {
+			  gen_helper_neon_cge_f64(tcg_res, tcg_op1, zero, fpst);
+		      }
+		  } else {
+		      /* GT */
+		      if (size == 2) {
+			  gen_helper_neon_cgt_f32(tcg_res, tcg_op1, zero, fpst);
+		      } else {
+			  gen_helper_neon_cgt_f64(tcg_res, tcg_op1, zero, fpst);
+		      }
+		  }
+		  break;
+	      case 0x0d:
+		  if (is_u) {
+		      /* LE */
+		      if (size == 2) {
+			  gen_helper_neon_cge_f32(tcg_res, zero, tcg_op1, fpst);
+		      } else {
+			  gen_helper_neon_cge_f64(tcg_res, zero, tcg_op1, fpst);
+		      }
+		  } else {
+		      /* EQ */
+		      if (size == 2) {
+			  gen_helper_neon_ceq_f32(tcg_res, tcg_op1, zero, fpst);
+		      } else {
+			  gen_helper_neon_ceq_f64(tcg_res, tcg_op1, zero, fpst);
+		      }
+		  }
+		  break;
+	      case 0x0e:
+		  /* LT */
+		  if (size == 2) {
+		      gen_helper_neon_cgt_f32(tcg_res, zero, tcg_op1, fpst);
+		  } else {
+		      gen_helper_neon_cgt_f64(tcg_res, zero, tcg_op1, fpst);
+		  }
+	      }
+	      simd_st(tcg_res, freg_offs_d + i, size);
+	  }
+	  
+	  tcg_temp_free_i64(zero);
+	  tcg_temp_free_ptr(fpst);
 	}
 	break;
     default:

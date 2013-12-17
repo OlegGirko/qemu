@@ -1807,6 +1807,24 @@ uint32_t HELPER(neon_cgt_f32)(uint32_t a, uint32_t b, void *fpstp)
     return -float32_lt(make_float32(b), make_float32(a), fpst);
 }
 
+uint64_t HELPER(neon_ceq_f64)(uint64_t a, uint64_t b, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    return -float64_eq_quiet(make_float64(a), make_float64(b), fpst);
+}
+
+uint64_t HELPER(neon_cge_f64)(uint64_t a, uint64_t b, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    return -float64_le(make_float64(b), make_float64(a), fpst);
+}
+
+uint64_t HELPER(neon_cgt_f64)(uint64_t a, uint64_t b, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    return -float64_lt(make_float64(b), make_float64(a), fpst);
+}
+
 uint32_t HELPER(neon_acge_f32)(uint32_t a, uint32_t b, void *fpstp)
 {
     float_status *fpst = fpstp;
