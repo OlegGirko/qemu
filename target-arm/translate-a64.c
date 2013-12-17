@@ -2839,7 +2839,7 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
     int opcode = get_bits(insn, 11, 5);
     bool is_q = get_bits(insn, 30, 1);
     bool is_u = get_bits(insn, 29, 1);
-    bool is_pair = is_u;
+    bool is_pair = false;
     bool is_float = false;
     bool is_op2 = false;
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
@@ -2893,12 +2893,16 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	is_op2 = size & 2;
 	size = (size & 1) + 2;
 	ebytes = (1 << size);
-	is_u = true;
-	if (is_pair) {
-	    /* XXX Can't yet handle.  */
-	    unallocated_encoding(s);
-	    return;
+	if (is_u) {
+	    if (is_op2) {
+		/* FABD unimplemented.  */
+		unallocated_encoding(s);
+		return;
+	    } else {
+		is_pair = true;
+	    }
 	}
+	is_u = true;
 	break;
     }
 
@@ -2907,8 +2911,20 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
        but we still do the loop element-wise, i.e. do four times or
        twice as much work as needed.  */
     for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
-        simd_ld(tcg_op1, freg_offs_n + i, size, !is_u);
-        simd_ld(tcg_op2, freg_offs_m + i, size, !is_u);
+	if (is_pair) {
+	    int regsize = is_q ? 16 : 8;
+	    if (i * 2 < regsize) {
+		simd_ld(tcg_op1, freg_offs_n + 2 * i, size, !is_u);
+		simd_ld(tcg_op2, freg_offs_n + 2 * i + 1, size, !is_u);
+	    } else {
+		simd_ld(tcg_op1, freg_offs_m + 2 * i - regsize, size, !is_u);
+		simd_ld(tcg_op2, freg_offs_m + 2 * i + 1 - regsize, size,
+			!is_u);
+	    }
+	} else {
+	    simd_ld(tcg_op1, freg_offs_n + i, size, !is_u);
+	    simd_ld(tcg_op2, freg_offs_m + i, size, !is_u);
+	}
 
         switch (opcode) {
         case 0x10: /* ADD / SUB */
@@ -3015,7 +3031,7 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	      }
 
 	      switch (is_op2 << 8 | opcode) {
-	      case 0x01a: /* FADD */
+	      case 0x01a: /* FADD / FADDP */
 		  if (size == 2)
 		    gen_helper_vfp_adds(tcg_res, tcg_op1, tcg_op2, fpst);
 		  else
