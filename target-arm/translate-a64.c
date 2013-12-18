@@ -3965,6 +3965,141 @@ static void handle_simd_shifti(DisasContext *s, uint32_t insn)
     }
 }
 
+/* SIMD vector * indexed element operations */
+static void handle_simd_vecxelem(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int rm = get_bits(insn, 16, 4);
+    int opcode = get_bits(insn, 12, 4);
+    int lbit = get_bits(insn, 21, 1);
+    int mbit = get_bits(insn, 20, 1);
+    int hbit = get_bits(insn, 11, 1);
+    int size = get_bits(insn, 22, 2);
+    int ebytes = 1 << size;
+    bool is_q = get_bits(insn, 30, 1);
+    bool is_u = get_bits(insn, 29, 1);
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    int freg_offs_m;
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_acc;
+    bool uses_accum = false;
+    bool is_float = false;
+    int index, i;
+
+    opcode = (is_u << 4) | opcode;
+
+    switch (opcode) {
+    case 0x09: /* FMUL */
+	is_float = true;
+	size = (size & 1) + 2;
+	ebytes = 1 << size;
+	is_u = true;
+	break;
+    case 0x10: /* MLA */
+    case 0x14: /* MLS */
+	uses_accum = true;
+    }
+
+    if (is_float) {
+	rm |= mbit << 4;
+	switch (((size & 1) << 1) | lbit) {
+	case 0x0:
+	case 0x1:
+	    index = (hbit << 1) | lbit;
+	    break;
+	case 0x2:
+	    index = hbit;
+	    break;
+	default:
+	    unallocated_encoding(s);
+	    return;
+	}
+    } else {
+	switch (size) {
+	case 0x1:
+	    index = (hbit << 2) | (lbit << 1) | mbit;
+	    break;
+	case 0x2:
+	    index = (hbit << 1) | lbit;
+	    rm |= mbit << 4;
+	    break;
+	default:
+	    unallocated_encoding(s);
+	    return;
+	}
+    }
+    
+    if (uses_accum) {
+        tcg_acc = tcg_temp_new_i64();
+    }
+    
+    freg_offs_m = offsetof(CPUARMState, vfp.regs[rm * 2]);
+    
+    simd_ld(tcg_op2, freg_offs_m + ebytes * index, size, !is_u);
+    
+    for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
+	simd_ld(tcg_op1, freg_offs_n + i, size, !is_u);
+	if (uses_accum) {
+	    simd_ld(tcg_acc, freg_offs_d + i, size, !is_u);
+	}
+
+	switch (opcode) {
+	case 0x10: /* MLA */
+	    tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
+	    tcg_gen_add_i64(tcg_res, tcg_acc, tcg_res);
+	    break;
+	case 0x14: /* MLS */
+	    tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
+	    tcg_gen_sub_i64(tcg_res, tcg_acc, tcg_res);
+	    break;
+	case 0x08: /* MUL */
+	    tcg_gen_mul_i64(tcg_res, tcg_op1, tcg_op2);
+	    break;
+	case 0x09: /* FMUL */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+	      
+	      if (size == 3 && !is_q) {
+		  unallocated_encoding(s);
+		  return;
+	      }
+	      
+	      if (size == 2) {
+		  gen_helper_vfp_muls(tcg_res, tcg_op1, tcg_op2, fpst);
+	      } else {
+		  gen_helper_vfp_muld(tcg_res, tcg_op1, tcg_op2, fpst);
+	      }
+	      
+	      tcg_temp_free_ptr(fpst);
+	    }
+	    break;
+	default:
+	    /* Other cases not handled yet */
+	    unallocated_encoding(s);
+	    return;
+	}
+	
+	simd_st(tcg_res, freg_offs_d + i, size);
+    }
+    
+    if (!is_q) {
+	TCGv_i64 tcg_zero = tcg_const_i64(0);
+	simd_st(tcg_zero, freg_offs_d + sizeof(float64), 3);
+	tcg_temp_free_i64(tcg_zero);
+    }
+    
+    if (uses_accum) {
+	tcg_temp_free_i64(tcg_acc);
+    }
+    tcg_temp_free_i64(tcg_res);
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_op2);
+}
+
 /* SIMD load/store multiple (post-indexed) */
 static void handle_simdldstm(DisasContext *s, uint32_t insn, bool is_wback)
 {
@@ -4544,7 +4679,9 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 	} else if (!get_bits(insn, 31, 1) && !get_bits(insn, 23, 1) &&
 		   get_bits(insn, 10, 1)) {
 	    handle_simd_shifti(s, insn);
-        } else {
+        } else if (!get_bits(insn, 10, 1) && !get_bits(insn, 31, 1)) {
+	    handle_simd_vecxelem(s, insn);
+	} else {
             goto unknown_insn;
         }
         break;
