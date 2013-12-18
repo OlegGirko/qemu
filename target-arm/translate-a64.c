@@ -2626,6 +2626,38 @@ static void handle_v3add(DisasContext *s, uint32_t insn)
     tcg_temp_free_i64(tcg_res);
 }
 
+/* SIMD pairwise (integer) add.  */
+
+static void handle_addp(DisasContext *s, uint32_t insn)
+{
+    int rd = get_bits(insn, 0, 5);
+    int rn = get_bits(insn, 5, 5);
+    int size = get_bits(insn, 22, 2);
+    int ebytes = 1 << size;
+    int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
+    int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
+    TCGv_i64 tcg_op1 = tcg_temp_new_i64();
+    TCGv_i64 tcg_op2 = tcg_temp_new_i64();
+    TCGv_i64 tcg_res = tcg_temp_new_i64();
+
+    if (size != 3) {
+	unallocated_encoding(s);
+	return;
+    }
+
+    simd_ld(tcg_op1, freg_offs_n, size, false);
+    simd_ld(tcg_op2, freg_offs_n + ebytes, size, false);
+
+    tcg_gen_add_i64(tcg_res, tcg_op1, tcg_op2);
+
+    clear_fpreg(rd);
+    simd_st(tcg_res, freg_offs_d, size);
+
+    tcg_temp_free_i64(tcg_op1);
+    tcg_temp_free_i64(tcg_op2);
+    tcg_temp_free_i64(tcg_res);
+}
+
 /* SIMD scalar pairwise, floating point single precision.  */
 
 static void handle_scpsp(DisasContext *s, uint32_t insn)
@@ -4649,8 +4681,7 @@ void disas_a64_insn(CPUARMState *env, DisasContext *s)
 		   get_bits(insn, 17, 5) == 0x18 &&
 		   get_bits(insn, 10, 2) == 0x2) {
 	    if (get_bits(insn, 12, 5) == 0x1b) {
-		/* ADDP unsupported.  */
-		goto unknown_insn;
+		handle_addp(s, insn);
 	    } else if (get_bits (insn, 22, 1)) {
 		handle_scpdp (s, insn);
 	    } else {
