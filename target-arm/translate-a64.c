@@ -3681,6 +3681,28 @@ static void handle_simd_misc(DisasContext *s, uint32_t insn)
 	  tcg_temp_free_ptr(fpst);
 	}
 	break;
+    case 0x1f: /* FSQRT */
+	{
+	  TCGv_ptr fpst = get_fpstatus_ptr();
+
+	  if (size == 3 && !is_q) {
+	      unallocated_encoding(s);
+	      return;
+	  }
+
+	  for (i = 0; i < (is_q ? 16 : 8); i += ebytes) {
+	      simd_ld(tcg_op1, freg_offs_n + i, size, false);
+	      if (size == 2) {
+		  gen_helper_vfp_sqrts(tcg_res, tcg_op1, fpst);
+	      } else {
+		  gen_helper_vfp_sqrtd(tcg_res, tcg_op1, fpst);
+	      }
+	      simd_st(tcg_res, freg_offs_d + i, size);
+	  }
+
+	  tcg_temp_free_ptr(fpst);
+	}
+	break;
     default:
 	unallocated_encoding(s);
 	return;
