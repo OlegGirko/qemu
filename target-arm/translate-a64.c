@@ -2861,6 +2861,13 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    return;
 	}
 	break;
+    case 0x18: /* FMAXNM / FMINNM / FMAXNMP / FMINNMP */
+	is_op2 = size & 2;
+	size = (size & 1) + 2;
+	ebytes = (1 << size);
+	is_pair = is_u;
+	is_u = true;
+	break;
     case 0x19: /* FMLA / FMLS */
 	tcg_acc = tcg_temp_new_i64();
 	uses_accum = true;
@@ -2915,10 +2922,10 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
 	    int regsize = is_q ? 16 : 8;
 	    if (i * 2 < regsize) {
 		simd_ld(tcg_op1, freg_offs_n + 2 * i, size, !is_u);
-		simd_ld(tcg_op2, freg_offs_n + 2 * i + 1, size, !is_u);
+		simd_ld(tcg_op2, freg_offs_n + 2 * i + ebytes, size, !is_u);
 	    } else {
 		simd_ld(tcg_op1, freg_offs_m + 2 * i - regsize, size, !is_u);
-		simd_ld(tcg_op2, freg_offs_m + 2 * i + 1 - regsize, size,
+		simd_ld(tcg_op2, freg_offs_m + 2 * i + ebytes - regsize, size,
 			!is_u);
 	    }
 	} else {
@@ -2983,6 +2990,30 @@ static void handle_simd3s(DisasContext *s, uint32_t insn)
         expand_ones:
 	    /* Convert 1/0 into 0/all-ones.  */
 	    tcg_gen_subi_i64 (tcg_res, tcg_res, 1);
+	    break;
+
+	case 0x18: /* FMAXNM / FMINNM / FMAXNMP / FMINNMP */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+
+	      if (is_op2) {
+		  /* FMINNM / FMINNMP */
+		  if (size == 2) {
+		      gen_helper_vfp_minnms(tcg_res, tcg_op1, tcg_op2, fpst);
+		  } else {
+		      gen_helper_vfp_minnmd(tcg_res, tcg_op1, tcg_op2, fpst);
+		  }
+	      } else {
+		  /* FMAXNM / FMAXNMP */
+		  if (size == 2) {
+		      gen_helper_vfp_maxnms(tcg_res, tcg_op1, tcg_op2, fpst);
+		  } else {
+		      gen_helper_vfp_maxnmd(tcg_res, tcg_op1, tcg_op2, fpst);
+		  }
+	      }
+	      
+	      tcg_temp_free_ptr(fpst);
+	    }
 	    break;
 
 	case 0x19: /* FMLA / FMLS */
@@ -3333,12 +3364,27 @@ static void handle_simd_accross(DisasContext *s, uint32_t insn)
     int opcode = get_bits(insn, 12, 5);
     bool is_q = get_bits(insn, 30, 1);
     bool is_u = get_bits(insn, 29, 1);
+    bool is_op2 = false;
     int freg_offs_d = offsetof(CPUARMState, vfp.regs[rd * 2]);
     int freg_offs_n = offsetof(CPUARMState, vfp.regs[rn * 2]);
     TCGv_i64 tcg_op1 = tcg_temp_new_i64();
     TCGv_i64 tcg_res = tcg_temp_new_i64();
     int ebytes = (1 << size);
     int i;
+
+    switch (opcode) {
+    case 0x0c: /* FMAXNMV / FMINNMV */
+    case 0x0f: /* FMAXV / FMINV */
+	is_op2 = size & 2;
+	size = (size & 1) + 2;
+	ebytes = (1 << size);
+	if (!is_q || size != 2) {
+	    /* Only the ".4S" arrangement is defined for these operations.  */
+	    unallocated_encoding(s);
+	    return;
+	}
+	break;
+    }
 
     /* For the non-floats size can't be 3, and if it's 2 then
        Q is set (128 bits).  So for ADDLV which uses a 2*esize
@@ -3377,8 +3423,33 @@ static void handle_simd_accross(DisasContext *s, uint32_t insn)
 	    break;
 
 	case 0x0c: /* FMAXNMV / FMINNMV */
-	case 0x0f: /* FMAXV / FMINV*/
-	    /* We don't yet implement these.  */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+	      if (is_op2) {
+		  /* FMINNMV */
+		  gen_helper_vfp_minnms(tcg_res, tcg_op1, tcg_res, fpst);
+	      } else {
+		  /* FMAXNMV */
+		  gen_helper_vfp_maxnms(tcg_res, tcg_op1, tcg_res, fpst);
+	      }
+	      tcg_temp_free_ptr(fpst);
+	    }
+	    break;
+
+	case 0x0f: /* FMAXV / FMINV */
+	    {
+	      TCGv_ptr fpst = get_fpstatus_ptr();
+	      if (is_op2) {
+		  /* FMINV */
+		  gen_helper_vfp_mins(tcg_res, tcg_op1, tcg_res, fpst);
+	      } else {
+		  /* FMAXV */
+		  gen_helper_vfp_maxs(tcg_res, tcg_op1, tcg_res, fpst);
+	      }
+	      tcg_temp_free_ptr(fpst);
+	    }
+	    break;
+
 	default:
 	    unallocated_encoding(s);
 	    return;
