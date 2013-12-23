@@ -273,7 +273,6 @@ static void handle_br(DisasContext *s, uint32_t insn)
         tcg_gen_movi_i64(cpu_reg(30), s->pc);
         break;
     case 2: /* RET */
-        source = 30;
         break;
     case 3:
         unallocated_encoding(s);
