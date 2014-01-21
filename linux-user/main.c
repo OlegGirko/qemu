@@ -709,6 +709,18 @@ done:
     return segv;
 }
 
+static int arm_advance_condexec(uint32_t condexec_bits) {
+    /* adjust the IT bits when skipping over an instruction */
+    /* see gen_intermediate_code_internal in translate.c for matching code */
+    uint32_t condexec_mask = (condexec_bits & 0x0f) << 1;
+    uint32_t condexec_cond = condexec_bits >> 4;
+    condexec_cond = (condexec_cond & 0x0e) | ((condexec_mask >> 4) & 1);
+    condexec_mask = (condexec_mask << 1) & 0x1f;
+    if (condexec_mask == 0)
+        return 0;
+    return (condexec_cond << 4) | (condexec_mask >> 1);
+}
+
 static int do_strex(CPUARMState *env)
 {
 #ifdef TARGET_ARM64
@@ -785,6 +797,7 @@ static int do_strex(CPUARMState *env)
 fail:
     env->regs[15] += 4;
     env->regs[(env->exclusive_info >> 4) & 0xf] = rc;
+    env->condexec_bits = arm_advance_condexec(env->condexec_bits);
 done:
     end_exclusive();
     return segv;
