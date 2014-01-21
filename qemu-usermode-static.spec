@@ -9,21 +9,19 @@ Name: qemu-usermode-static
 # << macros
 
 Summary:    Universal CPU emulator
-Version:    1.2.0.2012.09
+Version:    1.6.2
 Release:    1
 Group:      System/Emulators/PC
 License:    GPLv2
 ExclusiveArch:  %{ix86}
 URL:        https://launchpad.net/qemu-linaro/
-Source0:    qemu-linaro-1.2.0-2012.09.tar.gz
+Source0:    qemu-aarch64-1.6.2.tar.gz
 Source1:    qemu-binfmt-conf.sh
 Source100:  qemu-usermode.yaml
-Patch0:     fix-glibc-install-locales.patch
-Patch1:     mips-support.patch
-Patch2:     0038-linux-user-fix-segfault-deadlock.pa.patch
-Patch3:     0024-linux-user-lock-tcg.patch
-Patch4:     0025-linux-user-Run-multi-threaded-code-on-one-core.patch
-Patch5:     fix-strex.patch
+Patch1:     0001-Revert-fix-glibc-install-locales-it-breaks-glibc.patch
+Patch2:     0002-Applied-MIPS-patches.patch
+Patch3:     0003-linux-user-fix-segfault-deadlock.patch
+Patch4:     0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
 BuildRequires:  pkgconfig(ext2fs)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(zlib)
@@ -34,26 +32,23 @@ BuildRequires:  glibc-static
 BuildRequires:  python-devel
 BuildRequires:  glib2-static
 BuildRequires:  pcre-static
+BuildRequires:  pixman-devel
 
 %description
 QEMU is an extremely well-performing CPU emulator that allows you to choose between simulating an entire system and running userspace binaries for different architectures under your native operating system. It currently emulates x86, ARM, PowerPC and SPARC CPUs as well as PC and PowerMac systems.
 
 
 %prep
-%setup -q -n qemu-linaro-1.2.0-2012.09
+%setup -q -n src
 
-# fix-glibc-install-locales.patch
-%patch0 -p1
-# mips-support.patch
+# 0001-Revert-fix-glibc-install-locales-it-breaks-glibc.patch
 %patch1 -p1
-# 0038-linux-user-fix-segfault-deadlock.pa.patch
+# 0002-Applied-MIPS-patches.patch
 %patch2 -p1
-# 0024-linux-user-lock-tcg.patch
+# 0003-linux-user-fix-segfault-deadlock.patch
 %patch3 -p1
-# 0025-linux-user-Run-multi-threaded-code-on-one-core.patch
+# 0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
 %patch4 -p1
-# fix-strex.patch
-%patch5 -p1
 # >> setup
 # << setup
 
@@ -78,7 +73,7 @@ CFLAGS=`echo $CFLAGS | sed 's|-O2|-O|g'` ; export CFLAGS ;
 --enable-linux-user \
 --enable-guest-base \
 --disable-werror \
---target-list=arm-linux-user,mipsel-linux-user
+--target-list=arm-linux-user,arm64-linux-user,mipsel-linux-user
 # << build pre
 
 

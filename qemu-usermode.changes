@@ -1,3 +1,8 @@
+* Tue Jan 21 2014 Oleg Girko <oleg.girko@jolla.com> - 1.6.2
+- Add aarch64 support.
+- Rebase on v1.6.2.
+- Convert to gitpkg.
+
 * Sat Jun 01 2013 Carsten Munk <carsten.munk@jollamobile.com> - 1.2.0.2012.09
 - Add patches to prevent problems when multithreading on multiple cores
 
