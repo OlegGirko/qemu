@@ -34,6 +34,7 @@
 #include "qemu/timer.h"
 #include "qemu/envlist.h"
 #include "elf.h"
+#include <sys/resource.h>
 
 char *exec_path;
 
@@ -3795,6 +3796,17 @@ int main(int argc, char **argv, char **envp)
         fprintf(stderr, "Unable to find CPU definition\n");
         exit(1);
     }
+
+#if defined(TARGET_MIPS)
+    {
+        /* Set OPEN_MAX on 1024 */
+        struct rlimit rlim1;
+        rlim1.rlim_cur=1024;
+        rlim1.rlim_max=1024;
+        setrlimit(5, &rlim1);
+    }
+#endif /* TARGET_MIPS */
+
     cpu = ENV_GET_CPU(env);
     cpu_reset(cpu);
 

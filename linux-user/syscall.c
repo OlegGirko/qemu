@@ -112,6 +112,7 @@ int __clone2(int (*fn)(void *), void *child_stack_base,
 #include <linux/dm-ioctl.h>
 #include <linux/reboot.h>
 #include <linux/route.h>
+#include <sys/epoll.h>
 #include "linux_loop.h"
 #include "cpu-uname.h"
 
@@ -1058,6 +1059,17 @@ static abi_long do_pipe(void *cpu_env, abi_ulong pipedes,
         return host_pipe[0];
 #elif defined(TARGET_MIPS)
         ((CPUMIPSState*)cpu_env)->active_tc.gpr[3] = host_pipe[1];
+        
+    {
+		unsigned short val1=0;
+		val1 = (abi_long)(host_pipe[0] & 0xFFFFFFFF);
+	
+		abi_long *par;
+		*(&par) = (abi_long *)((CPUMIPSState*)cpu_env)->active_tc.gpr[4];
+		par[0]= val1;
+		par[1]= host_pipe[1];
+	}
+        
         return host_pipe[0];
 #elif defined(TARGET_SH4)
         ((CPUSH4State*)cpu_env)->gregs[1] = host_pipe[1];
@@ -3097,8 +3109,12 @@ static abi_long do_ipc(unsigned int call, int first,
         break;
 
     case IPCOP_semctl:
-        ret = do_semctl(first, second, third, (union target_semun)(abi_ulong) ptr);
-        break;
+        {
+            union target_semun *target_su;
+            target_su=(union target_semun *)(abi_ulong)ptr;
+            ret = do_semctl(first, second, third, *target_su);
+            break;
+        }
 
     case IPCOP_msgget:
         ret = get_errno(msgget(first, second));
@@ -7839,7 +7855,11 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         if (!(p = lock_user(VERIFY_WRITE, arg2, arg3, 0)))
             goto efault;
 	/* XXX might be just a libc wrapper, no wrapping then.  */
+#if defined(TARGET_MIPS)
+        ret = wrap_restart(get_errno(pread64(arg1, p, arg3, target_offset64(arg5, arg4))));
+#else
         ret = wrap_restart(get_errno(pread64(arg1, p, arg3, target_offset64(arg4, arg5))));
+#endif
         unlock_user(p, arg2, ret);
         break;
     case TARGET_NR_pwrite64:
@@ -7849,7 +7869,11 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
         }
         if (!(p = lock_user(VERIFY_READ, arg2, arg3, 1)))
             goto efault;
+#if defined(TARGET_MIPS)
+        ret = get_errno(pwrite64(arg1, p, arg3, target_offset64(arg5, arg4)));
+#else
         ret = get_errno(pwrite64(arg1, p, arg3, target_offset64(arg4, arg5)));
+#endif
         unlock_user(p, arg2, 0);
         break;
 #endif
