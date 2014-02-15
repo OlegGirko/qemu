@@ -52,6 +52,20 @@
 #define EXCP_KERNEL_TRAP     9   /* Jumped to kernel code page.  */
 #define EXCP_STREX          10
 
+static inline bool excp_is_internal(int excp)
+{
+    /* Return true if this exception number represents a QEMU-internal
+     * exception that will not be passed to the guest.
+     */
+    return excp == EXCP_INTERRUPT
+        || excp == EXCP_HLT
+        || excp == EXCP_DEBUG
+        || excp == EXCP_HALTED
+        || excp == EXCP_EXCEPTION_EXIT
+        || excp == EXCP_KERNEL_TRAP
+        || excp == EXCP_STREX;
+}
+
 #define ARMV7M_EXCP_RESET   1
 #define ARMV7M_EXCP_NMI     2
 #define ARMV7M_EXCP_HARD    3
