@@ -7,7 +7,7 @@
 #include "qemu/bitops.h"
 
 #ifndef CONFIG_USER_ONLY
-static inline int get_phys_addr(CPUARMState *env, uint32_t address,
+static inline int get_phys_addr(CPUARMState *env, target_ulong address,
                                 int access_type, int is_user,
                                 hwaddr *phys_ptr, int *prot,
                                 target_ulong *page_size);
@@ -1062,8 +1062,9 @@ static void par_write(CPUARMState *env, const ARMCPRegInfo *ri, uint64_t value)
  */
 static inline bool extended_addresses_enabled(CPUARMState *env)
 {
-    return arm_feature(env, ARM_FEATURE_LPAE)
-        && (env->cp15.c2_control & (1U << 31));
+    return arm_feature(env, ARM_FEATURE_V8)
+        || (arm_feature(env, ARM_FEATURE_LPAE)
+        && (env->cp15.c2_control & (1U << 31)));
 }
 
 static CPAccessResult ats_access(CPUARMState *env, const ARMCPRegInfo *ri)
@@ -3295,7 +3296,7 @@ typedef enum {
     permission_fault = 3,
 } MMUFaultType;
 
-static int get_phys_addr_lpae(CPUARMState *env, uint32_t address,
+static int get_phys_addr_lpae(CPUARMState *env, target_ulong address,
                               int access_type, int is_user,
                               hwaddr *phys_ptr, int *prot,
                               target_ulong *page_size_ptr)
@@ -3305,26 +3306,28 @@ static int get_phys_addr_lpae(CPUARMState *env, uint32_t address,
     MMUFaultType fault_type = translation_fault;
     uint32_t level = 1;
     uint32_t epd;
-    uint32_t tsz;
+    int32_t tsz;
+    uint32_t tg;
     uint64_t ttbr;
     int ttbr_select;
-    int n;
-    hwaddr descaddr;
+    hwaddr descaddr, descmask;
     uint32_t tableattrs;
     target_ulong page_size;
     uint32_t attrs;
+    int32_t granule_sz = 9;
+    int32_t va_size = arm_el_is_aa64(env, 1) ? 64 : 32;
 
     /* Determine whether this address is in the region controlled by
      * TTBR0 or TTBR1 (or if it is in neither region and should fault).
      * This is a Non-secure PL0/1 stage 1 translation, so controlled by
      * TTBCR/TTBR0/TTBR1 in accordance with ARM ARM DDI0406C table B-32:
      */
-    uint32_t t0sz = extract32(env->cp15.c2_control, 0, 3);
-    uint32_t t1sz = extract32(env->cp15.c2_control, 16, 3);
-    if (t0sz && !extract32(address, 32 - t0sz, t0sz)) {
+    uint32_t t0sz = extract32(env->cp15.c2_control, 0, 5);
+    uint32_t t1sz = extract32(env->cp15.c2_control, 16, 5);
+    if (t0sz && !extract64(address, va_size - t0sz, t0sz)) {
         /* there is a ttbr0 region and we are in it (high bits all zero) */
         ttbr_select = 0;
-    } else if (t1sz && !extract32(~address, 32 - t1sz, t1sz)) {
+    } else if (t1sz && !extract64(~address, va_size - t1sz, t1sz)) {
         /* there is a ttbr1 region and we are in it (high bits all one) */
         ttbr_select = 1;
     } else if (!t0sz) {
@@ -3350,10 +3353,26 @@ static int get_phys_addr_lpae(CPUARMState *env, uint32_t address,
         ttbr = env->cp15.ttbr0_el1;
         epd = extract32(env->cp15.c2_control, 7, 1);
         tsz = t0sz;
+
+        tg = extract32(env->cp15.c2_control, 14, 2);
+        if (tg == 1) { /* 64KB pages */
+            granule_sz = 13;
+        }
+        if (tg == 2) { /* 16KB pages */
+            granule_sz = 11;
+        }
     } else {
         ttbr = env->cp15.ttbr1_el1;
         epd = extract32(env->cp15.c2_control, 23, 1);
         tsz = t1sz;
+
+        tg = extract32(env->cp15.c2_control, 30, 2);
+        if (tg == 3)  { /* 64KB pages */
+            granule_sz = 13;
+        }
+        if (tg == 1) { /* 16KB pages */
+            granule_sz = 11;
+        }
     }
 
     if (epd) {
@@ -3361,34 +3380,37 @@ static int get_phys_addr_lpae(CPUARMState *env, uint32_t address,
         goto do_fault;
     }
 
-    /* If the region is small enough we will skip straight to a 2nd level
-     * lookup. This affects the number of bits of the address used in
-     * combination with the TTBR to find the first descriptor. ('n' here
-     * matches the usage in the ARM ARM sB3.6.6, where bits [39..n] are
-     * from the TTBR, [n-1..3] from the vaddr, and [2..0] always zero).
+    /* The starting level depends on the virtual address size which can be
+     * up to 48-bits and the translation granule size.
      */
-    if (tsz > 1) {
-        level = 2;
-        n = 14 - tsz;
+    if ((va_size - tsz) > (granule_sz * 4 + 3)) {
+        level = 0;
+    } else if ((va_size - tsz) > (granule_sz * 3 + 3)) {
+        level = 1;
     } else {
-        n = 5 - tsz;
+        level = 2;
     }
 
     /* Clear the vaddr bits which aren't part of the within-region address,
      * so that we don't have to special case things when calculating the
      * first descriptor address.
      */
-    address &= (0xffffffffU >> tsz);
+    if (tsz) {
+        address &= (1ULL << (va_size - tsz)) - 1;
+    }
+
+    descmask = (1ULL << (granule_sz + 3)) - 1;
 
     /* Now we can extract the actual base address from the TTBR */
-    descaddr = extract64(ttbr, 0, 40);
-    descaddr &= ~((1ULL << n) - 1);
+    descaddr = extract64(ttbr, 0, 48);
+    descaddr &= ~descmask;
 
     tableattrs = 0;
     for (;;) {
         uint64_t descriptor;
 
-        descaddr |= ((address >> (9 * (4 - level))) & 0xff8);
+        descaddr |= (address >> (granule_sz * (4 - level))) & descmask;
+        descaddr &= ~7ULL;
         descriptor = ldq_phys(cs->as, descaddr);
         if (!(descriptor & 1) ||
             (!(descriptor & 2) && (level == 3))) {
@@ -3411,11 +3433,16 @@ static int get_phys_addr_lpae(CPUARMState *env, uint32_t address,
          * These are basically the same thing, although the number
          * of bits we pull in from the vaddr varies.
          */
-        page_size = (1 << (39 - (9 * level)));
+        page_size = (1 << ((granule_sz * (4 - level)) + 3));
         descaddr |= (address & (page_size - 1));
         /* Extract attributes from the descriptor and merge with table attrs */
-        attrs = extract64(descriptor, 2, 10)
-            | (extract64(descriptor, 52, 12) << 10);
+        if (arm_feature(env, ARM_FEATURE_V8)) {
+            attrs = extract64(descriptor, 2, 10)
+                | (extract64(descriptor, 53, 11) << 10);
+        } else {
+            attrs = extract64(descriptor, 2, 10)
+                | (extract64(descriptor, 52, 12) << 10);
+        }
         attrs |= extract32(tableattrs, 0, 2) << 11; /* XN, PXN */
         attrs |= extract32(tableattrs, 3, 1) << 5; /* APTable[1] => AP[2] */
         /* The sense of AP[1] vs APTable[0] is reversed, as APTable[0] == 1
@@ -3549,7 +3576,7 @@ static int get_phys_addr_mpu(CPUARMState *env, uint32_t address,
  * @prot: set to the permissions for the page containing phys_ptr
  * @page_size: set to the size of the page containing phys_ptr
  */
-static inline int get_phys_addr(CPUARMState *env, uint32_t address,
+static inline int get_phys_addr(CPUARMState *env, target_ulong address,
                                 int access_type, int is_user,
                                 hwaddr *phys_ptr, int *prot,
                                 target_ulong *page_size)
@@ -3594,7 +3621,7 @@ int cpu_arm_handle_mmu_fault (CPUARMState *env, target_ulong address,
     if (ret == 0) {
         /* Map a single [sub]page.  */
         phys_addr &= ~(hwaddr)0x3ff;
-        address &= ~(uint32_t)0x3ff;
+        address &= ~(target_ulong)0x3ff;
         tlb_set_page (env, address, phys_addr, prot, mmu_idx, page_size);
         return 0;
     }
