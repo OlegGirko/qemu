@@ -2951,6 +2951,12 @@ static int disas_vfp_insn(CPUARMState * env, DisasContext *s, uint32_t insn)
     if (!arm_feature(env, ARM_FEATURE_VFP))
         return 1;
 
+    if (!s->cpacr_fpen) {
+        gen_exception_insn(s, 4, EXCP_UDEF,
+                           syn_fp_access_trap(1, 0xe, s->thumb));
+        return 0;
+    }
+
     if (!s->vfp_enabled) {
         /* VFP disabled.  Only allow fmxr/fmrx to/from some control regs.  */
         if ((insn & 0x0fe00fff) != 0x0ee00a10)
@@ -4228,6 +4234,12 @@ static int disas_neon_ls_insn(CPUARMState * env, DisasContext *s, uint32_t insn)
     TCGv_i32 tmp2;
     TCGv_i64 tmp64;
 
+    if (!s->cpacr_fpen) {
+        gen_exception_insn(s, 4, EXCP_UDEF,
+                           syn_fp_access_trap(1, 0xe, s->thumb));
+        return 0;
+    }
+
     if (!s->vfp_enabled)
       return 1;
     VFP_DREG_D(rd, insn);
@@ -4949,6 +4961,12 @@ static int disas_neon_data_insn(CPUARMState * env, DisasContext *s, uint32_t ins
     uint32_t imm, mask;
     TCGv_i32 tmp, tmp2, tmp3, tmp4, tmp5;
     TCGv_i64 tmp64;
+
+    if (!s->cpacr_fpen) {
+        gen_exception_insn(s, 4, EXCP_UDEF,
+                           syn_fp_access_trap(1, 0xe, s->thumb));
+        return 0;
+    }
 
     if (!s->vfp_enabled)
       return 1;
@@ -10660,6 +10678,7 @@ static inline void gen_intermediate_code_internal(ARMCPU *cpu,
 #if !defined(CONFIG_USER_ONLY)
     dc->user = (ARM_TBFLAG_PRIV(tb->flags) == 0);
 #endif
+    dc->cpacr_fpen = ARM_TBFLAG_CPACR_FPEN(tb->flags);
     dc->vfp_enabled = ARM_TBFLAG_VFPEN(tb->flags);
     dc->vec_len = ARM_TBFLAG_VECLEN(tb->flags);
     dc->vec_stride = ARM_TBFLAG_VECSTRIDE(tb->flags);
