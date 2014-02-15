@@ -2611,12 +2611,11 @@ void arm_cpu_do_interrupt(CPUState *cs)
 int cpu_arm_handle_mmu_fault (CPUARMState *env, target_ulong address, int rw,
                               int mmu_idx)
 {
+    env->exception.vaddress = address;
     if (rw == 2) {
         env->exception_index = EXCP_PREFETCH_ABORT;
-        env->cp15.c6_insn = address;
     } else {
         env->exception_index = EXCP_DATA_ABORT;
-        env->cp15.c6_data = address;
     }
     return 1;
 }
@@ -2821,6 +2820,9 @@ void arm_v7m_cpu_do_interrupt(CPUState *cs)
         return;
     case EXCP_PREFETCH_ABORT:
     case EXCP_DATA_ABORT:
+        /* TODO: if we implemented the MPU registers, this is where we
+         * should set the MMFAR, etc from exception.fsr and exception.vaddress.
+         */
         armv7m_nvic_set_pending(env->nvic, ARMV7M_EXCP_MEM);
         return;
     case EXCP_BKPT:
@@ -2935,9 +2937,11 @@ void arm_cpu_do_interrupt(CPUState *cs)
                 return;
             }
         }
-        env->cp15.c5_insn = 2;
+        env->exception.fsr = 2;
         /* Fall through to prefetch abort.  */
     case EXCP_PREFETCH_ABORT:
+        env->cp15.c5_insn = env->exception.fsr;
+        env->cp15.c6_insn = env->exception.vaddress;
         qemu_log_mask(CPU_LOG_INT, "...with IFSR 0x%x IFAR 0x%x\n",
                       env->cp15.c5_insn, env->cp15.c6_insn);
         new_mode = ARM_CPU_MODE_ABT;
@@ -2946,6 +2950,8 @@ void arm_cpu_do_interrupt(CPUState *cs)
         offset = 4;
         break;
     case EXCP_DATA_ABORT:
+        env->cp15.c5_data = env->exception.fsr;
+        env->cp15.c6_data = env->exception.vaddress;
         qemu_log_mask(CPU_LOG_INT, "...with DFSR 0x%x DFAR 0x%x\n",
                       env->cp15.c5_data, env->cp15.c6_data);
         new_mode = ARM_CPU_MODE_ABT;
@@ -3594,16 +3600,15 @@ int cpu_arm_handle_mmu_fault (CPUARMState *env, target_ulong address,
     }
 
     if (access_type == 2) {
-        env->cp15.c5_insn = ret;
-        env->cp15.c6_insn = address;
         env->exception_index = EXCP_PREFETCH_ABORT;
     } else {
-        env->cp15.c5_data = ret;
-        if (access_type == 1 && arm_feature(env, ARM_FEATURE_V6))
-            env->cp15.c5_data |= (1 << 11);
-        env->cp15.c6_data = address;
+        if (access_type == 1 && arm_feature(env, ARM_FEATURE_V6)) {
+            ret |= (1 << 11);
+        }
         env->exception_index = EXCP_DATA_ABORT;
     }
+    env->exception.vaddress = address;
+    env->exception.fsr = ret;
     return 1;
 }
 
