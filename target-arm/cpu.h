@@ -713,6 +713,13 @@ static inline uint32_t syn_cp15_rrt_trap(int cv, int cond, int opc1, int crm,
         | (rt2 << 10) | (rt << 5) | (crm << 1) | isread;
 }
 
+static inline uint32_t syn_fp_access_trap(int cv, int cond, bool is_thumb)
+{
+    return (EC_ADVSIMDFPACCESSTRAP << ARM_EL_EC_SHIFT)
+        | (is_thumb ? 0 : ARM_EL_IL)
+        | (cv << 24) | (cond << 20);
+}
+
 enum arm_cpu_mode {
   ARM_CPU_MODE_USR = 0x10,
   ARM_CPU_MODE_FIQ = 0x11,
@@ -1266,6 +1273,8 @@ static inline int cpu_mmu_index (CPUARMState *env)
 /* Bit usage when in AArch64 state */
 #define ARM_TBFLAG_AA64_EL_SHIFT    0
 #define ARM_TBFLAG_AA64_EL_MASK     (0x3 << ARM_TBFLAG_AA64_EL_SHIFT)
+#define ARM_TBFLAG_AA64_FPEN_SHIFT  2
+#define ARM_TBFLAG_AA64_FPEN_MASK   (1 << ARM_TBFLAG_AA64_FPEN_SHIFT)
 
 /* some convenience accessor macros */
 #define ARM_TBFLAG_AARCH64_STATE(F) \
@@ -1286,14 +1295,21 @@ static inline int cpu_mmu_index (CPUARMState *env)
     (((F) & ARM_TBFLAG_BSWAP_CODE_MASK) >> ARM_TBFLAG_BSWAP_CODE_SHIFT)
 #define ARM_TBFLAG_AA64_EL(F) \
     (((F) & ARM_TBFLAG_AA64_EL_MASK) >> ARM_TBFLAG_AA64_EL_SHIFT)
+#define ARM_TBFLAG_AA64_FPEN(F) \
+    (((F) & ARM_TBFLAG_AA64_FPEN_MASK) >> ARM_TBFLAG_AA64_FPEN_SHIFT)
 
 static inline void cpu_get_tb_cpu_state(CPUARMState *env, target_ulong *pc,
                                         target_ulong *cs_base, int *flags)
 {
+    int fpen = extract32(env->cp15.c1_coproc, 20, 2);
+
     if (is_a64(env)) {
         *pc = env->pc;
         *flags = ARM_TBFLAG_AARCH64_STATE_MASK
             | (arm_current_pl(env) << ARM_TBFLAG_AA64_EL_SHIFT);
+        if (fpen == 3 || (fpen == 1 && arm_current_pl(env) != 0)) {
+            *flags |= ARM_TBFLAG_AA64_FPEN_MASK;
+        }
     } else {
         int privmode;
         *pc = env->regs[15];
