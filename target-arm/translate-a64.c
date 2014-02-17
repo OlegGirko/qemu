@@ -6818,6 +6818,7 @@ static void disas_simd_scalar_two_reg_misc(DisasContext *s, uint32_t insn)
         case 0x7a: /* FCVTPU */
         case 0x7b: /* FCVTZU */
             unsupported_encoding(s, insn);
+            qemu_log_mask(LOG_UNIMP, "%d: opcode: 0x%x\n", __LINE__, opcode);
             return;
         default:
             unallocated_encoding(s);
@@ -8363,6 +8364,7 @@ static void disas_simd_two_reg_misc(DisasContext *s, uint32_t insn)
             return;
         }
         unsupported_encoding(s, insn);
+        qemu_log_mask(LOG_UNIMP, "%d: opcode: 0x%x\n", __LINE__, opcode);
         return;
     case 0x13: /* SHLL, SHLL2 */
         if (u == 0 || size == 3) {
@@ -8471,6 +8473,7 @@ static void disas_simd_two_reg_misc(DisasContext *s, uint32_t insn)
         case 0x7b: /* FCVTZU */
         case 0x7f: /* FSQRT */
             unsupported_encoding(s, insn);
+            qemu_log_mask(LOG_UNIMP, "%d: opcode: 0x%x\n", __LINE__, opcode);
             return;
         default:
             unallocated_encoding(s);
