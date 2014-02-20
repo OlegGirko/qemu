@@ -245,6 +245,12 @@ INLINE flag get_default_nan_mode(float_status *status)
 void float_raise( int8 flags STATUS_PARAM);
 
 /*----------------------------------------------------------------------------
+| Denormal handling. Will raise exceptions of enabled.
+*----------------------------------------------------------------------------*/
+float32 float32_squash_input_denormal(float32 a STATUS_PARAM);
+float64 float64_squash_input_denormal(float64 a STATUS_PARAM);
+
+/*----------------------------------------------------------------------------
 | Options to indicate which negations to perform in float*_muladd()
 | Using these differs from negating an input or output before calling
 | the muladd function in that this means that a NaN doesn't have its
@@ -424,6 +430,7 @@ INLINE float32 float32_set_sign(float32 a, int sign)
 #define float32_pi make_float32(0x40490fdb)
 #define float32_half make_float32(0x3f000000)
 #define float32_infinity make_float32(0x7f800000)
+#define float32_maxnorm make_float32(0x7f7fffff)
 
 
 /*----------------------------------------------------------------------------
@@ -535,6 +542,7 @@ INLINE float64 float64_set_sign(float64 a, int sign)
 #define float64_pi make_float64(0x400921fb54442d18LL)
 #define float64_half make_float64(0x3fe0000000000000LL)
 #define float64_infinity make_float64(0x7ff0000000000000LL)
+#define float64_maxnorm make_float64(0x7fefffffffffffffLL)
 
 /*----------------------------------------------------------------------------
 | The pattern for a default generated double-precision NaN.

@@ -166,7 +166,7 @@ DEF_HELPER_3(recps_f32, f32, f32, f32, env)
 DEF_HELPER_3(rsqrts_f32, f32, f32, f32, env)
 DEF_HELPER_2(recpe_f32, f32, f32, env)
 DEF_HELPER_2(rsqrte_f32, f32, f32, env)
-DEF_HELPER_2(recpe_u32, i32, i32, env)
+DEF_HELPER_2(recpe_u32, i32, i32, ptr)
 DEF_HELPER_2(rsqrte_u32, i32, i32, env)
 DEF_HELPER_5(neon_tbl, i32, env, i32, i32, i32, i32)
 

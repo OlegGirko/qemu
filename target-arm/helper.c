@@ -4097,12 +4097,12 @@ float32 HELPER(rsqrts_f32)(float32 a, float32 b, CPUARMState *env)
 /* The algorithm that must be used to calculate the estimate
  * is specified by the ARM ARM.
  */
-static float64 recip_estimate(float64 a, CPUARMState *env)
+float64 recip_estimate(float64 a, float_status *real_fp_status)
 {
     /* These calculations mustn't set any fp exception flags,
      * so we use a local copy of the fp_status.
      */
-    float_status dummy_status = env->vfp.standard_fp_status;
+    float_status dummy_status = *real_fp_status;
     float_status *s = &dummy_status;
     /* q = (int)(a * 512.0) */
     float64 q = float64_mul(float64_512, a, s);
@@ -4144,6 +4144,7 @@ float32 HELPER(recpe_f32)(float32 a, CPUARMState *env)
         if (!float32_is_zero(a)) {
             float_raise(float_flag_input_denormal, s);
         }
+        fprintf(stderr, "recpe_f32: div zero\n");
         float_raise(float_flag_divbyzero, s);
         return float32_set_sign(float32_infinity, float32_is_neg(a));
     } else if (a_exp >= 253) {
@@ -4156,7 +4157,7 @@ float32 HELPER(recpe_f32)(float32 a, CPUARMState *env)
 
     result_exp = 253 - a_exp;
 
-    f64 = recip_estimate(f64, env);
+    f64 = recip_estimate(f64, s);
 
     val32 = sign
         | ((result_exp & 0xff) << 23)
@@ -4270,8 +4271,9 @@ float32 HELPER(rsqrte_f32)(float32 a, CPUARMState *env)
     return make_float32(val);
 }
 
-uint32_t HELPER(recpe_u32)(uint32_t a, CPUARMState *env)
+uint32_t HELPER(recpe_u32)(uint32_t a, void *fpstp)
 {
+    float_status *s = fpstp;
     float64 f64;
 
     if ((a & 0x80000000) == 0) {
@@ -4281,7 +4283,7 @@ uint32_t HELPER(recpe_u32)(uint32_t a, CPUARMState *env)
     f64 = make_float64((0x3feULL << 52)
                        | ((int64_t)(a & 0x7fffffff) << 21));
 
-    f64 = recip_estimate (f64, env);
+    f64 = recip_estimate (f64, s);
 
     return 0x80000000 | ((float64_val(f64) >> 21) & 0x7fffffff);
 }

@@ -288,3 +288,254 @@ float64 HELPER(rsqrtsf_f64)(float64 a, float64 b, void *fpstp)
     }
     return float64_muladd(a, b, float64_three, float_muladd_halve_result, fpst);
 }
+
+/* Reciprocal functions */
+
+/* FPRecipEstimate()
+ *
+ * This is a slightly different front-end to process the 64 bit float
+ * but the actual estimation algolrithm is shared with the NEON equivalent.
+ */
+
+typedef struct {
+    float64  f;
+    uint64_t val64;
+    uint64_t sbit;
+    int64_t exp;
+    uint64_t frac;
+} ARMUnpackedF64;
+
+typedef struct {
+    float32  f;
+    uint32_t val32;
+    uint32_t sbit;
+    int32_t exp;
+    uint32_t frac;
+} ARMUnpackedF32;
+
+/* FPUnpack, also may squash input denormals */
+static ARMUnpackedF64 unpack_f64(float64 a, bool check, float_status *fpst)
+{
+    ARMUnpackedF64 result;
+    if (check) {
+        result.f = float64_squash_input_denormal(a, fpst);
+    } else {
+        result.f = a;
+    }
+    result.val64 = float64_val(result.f);
+    result.sbit = 0x8000000000000000ULL & result.val64;
+    result.exp = extract64(result.val64, 52, 11);
+    result.frac = extract64(result.val64, 0, 52);
+    return result;
+}
+
+static ARMUnpackedF32 unpack_f32(float32 a, bool check, float_status *fpst)
+{
+    ARMUnpackedF32 result;
+    if (check) {
+        result.f = float32_squash_input_denormal(a, fpst);
+    } else {
+        result.f = a;
+    }
+    result.val32 = float32_val(result.f);
+    result.sbit = 0x80000000ULL & result.val32;
+    result.exp = extract32(result.val32, 23, 8);
+    result.frac = extract32(result.val32, 0, 23);
+    return result;
+}
+
+static bool handle_float32_nan(float32 *num, float_status *fpst)
+{
+    float32 a = *num;
+
+    if (float32_is_any_nan(a)) {
+        if (float32_is_signaling_nan(a)) {
+            float_raise(float_flag_invalid, fpst);
+            *num = float32_maybe_silence_nan(a);
+        }
+        if (fpst->default_nan_mode) {
+            *num = float32_default_nan;
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool handle_float64_nan(float64 *num, float_status *fpst)
+{
+    float64 a = *num;
+
+    if (float64_is_any_nan(a)) {
+        if (float64_is_signaling_nan(a)) {
+            float_raise(float_flag_invalid, fpst);
+            *num = float64_maybe_silence_nan(a);
+        }
+        if (fpst->default_nan_mode) {
+            *num = float64_default_nan;
+        }
+        return true;
+    }
+    return false;
+}
+
+static bool do_we_round_to_infinity(float_status *fpst, bool sign_bit)
+{
+    switch (fpst->float_rounding_mode) {
+    case float_round_nearest_even: /* Round to Nearest */
+        return true;
+    case float_round_up: /* Round to +Inf */
+        return !sign_bit;
+    case float_round_down: /* Round to -Inf */
+        return sign_bit;
+    case float_round_to_zero: /* Round to Zero */
+        return false;
+    }
+
+    g_assert_not_reached();
+    return false;
+}
+
+/* Common wrapper to call recip_estimate */
+static ARMUnpackedF64 call_recip_estimate(ARMUnpackedF64 num,
+                                          int exp_offset, float_status *fpst) {
+    ARMUnpackedF64 result;
+    float64 scaled, estimate;
+
+    /* Generate the scaled number for the estimate function */
+    if (num.exp == 0) {
+        if (extract64(num.frac, 51, 1) == 0) {
+            num.exp = -1;
+            num.frac = extract64(num.frac, 0, 50) << 2;
+        } else {
+            num.frac = extract64(num.frac, 0, 51) << 1;
+        }
+    }
+
+    /* scaled = '0' : '01111111110' : fraction<51:44> : Zeros(44); */
+    scaled = make_float64((0x3feULL << 52)
+                          |extract64(num.frac, 44, 8) << 44);
+
+    estimate = recip_estimate(scaled, fpst);
+
+    /* Build new result */
+    result = unpack_f64(estimate, false, fpst);
+    result.exp = exp_offset - num.exp;
+
+    if (result.exp == 0) {
+        result.frac = 1ULL << 51 | extract64(result.frac, 1, 51);
+    } else if (result.exp == -1) {
+        result.frac = 1ULL << 50 | extract64(result.frac, 2, 50);
+        result.exp = 0;
+    }
+
+    return result;
+}
+
+
+float32 HELPER(frecpe_f32)(float32 input, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    ARMUnpackedF32 f32;
+    ARMUnpackedF64 f64, r64;
+
+    f32 = unpack_f32(input, true, fpst);
+
+    if (handle_float32_nan(&f32.f, fpst)) {
+        return f32.f;
+    } else if (float32_is_infinity(f32.f)) {
+        return float32_set_sign(float32_zero, float32_is_neg(f32.f));
+    } else if (float32_is_zero(f32.f)) {
+        float_raise(float_flag_divbyzero, fpst);
+        return float32_set_sign(float32_infinity, float32_is_neg(f32.f));
+    } else if ((f32.val32 & ~(1ULL << 31)) < (1ULL << 21)) {
+        /* Abs(value) < 2.0^-128 */
+        float_raise(float_flag_overflow | float_flag_inexact, fpst);
+        if (do_we_round_to_infinity(fpst, f32.sbit)) {
+            return float32_set_sign(float32_infinity, float32_is_neg(f32.f));
+        } else {
+            return float32_set_sign(float32_maxnorm, float32_is_neg(f32.f));
+        }
+    } else if (f32.exp >= 253 && fpst->flush_to_zero) {
+        float_raise(float_flag_underflow, fpst);
+        return float32_set_sign(float32_zero, float32_is_neg(f32.f));
+    }
+
+    f64.exp = f32.exp;
+    f64.frac = (int64_t)(f32.frac) << 29;
+    r64 = call_recip_estimate(f64, 253, fpst);
+
+    /* result = sign : result_exp<7:0> : fraction<51:29>; */
+    return make_float32(f32.sbit |
+                        (r64.exp & 0xff) << 23 |
+                        extract64(r64.frac, 29, 24));
+}
+
+
+float64 HELPER(frecpe_f64)(float64 input, void *fpstp)
+{
+    float_status *fpst = fpstp;
+    ARMUnpackedF64 f64, r64;
+
+    f64 = unpack_f64(input, true, fpst);
+
+    /* Deal with any special cases */
+    if (handle_float64_nan(&f64.f, fpst)) {
+        return f64.f;
+    } else if (float64_is_infinity(f64.f)) {
+        return float64_set_sign(float64_zero, float64_is_neg(f64.f));
+    } else if (float64_is_zero(f64.f)) {
+        float_raise(float_flag_divbyzero, fpst);
+        return float64_set_sign(float64_infinity, float64_is_neg(f64.f));
+    } else if ((f64.val64 & ~(1ULL << 63)) < (1ULL << 50)) {
+        /* Abs(value) < 2.0^-1024 */
+        float_raise(float_flag_overflow | float_flag_inexact, fpst);
+        if (do_we_round_to_infinity(fpst, f64.sbit)) {
+            return float64_set_sign(float64_infinity, float64_is_neg(f64.f));
+        } else {
+            return float64_set_sign(float64_maxnorm, float64_is_neg(f64.f));
+        }
+    } else if (f64.exp >= 1023 && fpst->flush_to_zero) {
+        float_raise(float_flag_underflow, fpst);
+        return float64_set_sign(float64_zero, float64_is_neg(f64.f));
+    }
+
+    r64 = call_recip_estimate(f64, 2045, fpst);
+
+    /* result = sign : result_exp<10:0> : fraction<51:0> */
+    return make_float64(f64.sbit |
+                        ((r64.exp & 0x7ff) << 52) |
+                        r64.frac);
+}
+
+/* Floating-point reciprocal exponent - see FPRecpX in ARM ARM */
+float32 HELPER(frecpx_f32)(float32 a, void *fpstp)
+{
+    ARMUnpackedF32 f32 = unpack_f32(a, false, NULL);
+    float_status *fpst = fpstp;
+
+    if (handle_float32_nan(&f32.f, fpst)) {
+        return f32.f;
+    }
+
+    if (f32.exp == 0) {
+        return make_float32(f32.sbit | (0xfe << 23));
+    } else {
+        return make_float32(f32.sbit | (~f32.exp & 0xff) << 23);
+    }
+}
+
+float64 HELPER(frecpx_f64)(float64 a, void *fpstp)
+{
+    ARMUnpackedF64 f64 = unpack_f64(a, false, NULL);
+    float_status *fpst = fpstp;
+
+    if (handle_float64_nan(&a, fpst)) {
+        return a;
+    }
+
+    if (f64.exp == 0) {
+        return make_float64(f64.sbit | (0x7feULL << 52));
+    } else {
+        return make_float64(f64.sbit | (~f64.exp & 0x7ffULL) << 52);
+    }
+}

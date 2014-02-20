@@ -997,6 +997,15 @@ bool write_list_to_cpustate(ARMCPU *cpu);
  */
 bool write_cpustate_to_list(ARMCPU *cpu);
 
+/**
+ * recip_estimate:
+ * @f: float64
+ * @fpst: status register
+ *
+ * Perform a reciperocal estimate. used by bother helper and helper-a64.c
+ */
+float64 recip_estimate(float64 f, float_status *fpst);
+
 /* Does the core conform to the the "MicroController" profile. e.g. Cortex-M3.
    Note the M in older cores (eg. ARM7TDMI) stands for Multiply. These are
    conventional cores (ie. Application or Realtime profile).  */
