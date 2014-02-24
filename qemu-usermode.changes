@@ -1,3 +1,6 @@
+* Mon Feb 24 2014 Oleg Girko <oleg.girko@jolla.com> - 1.6.2
+- Add patch from aarch64-1.6: set source for ret instruction correctly.
+
 * Tue Jan 21 2014 Oleg Girko <oleg.girko@jolla.com> - 1.6.2
 - Add aarch64 support.
 - Rebase on v1.6.2.

@@ -22,6 +22,7 @@ Patch1:     0001-Revert-fix-glibc-install-locales-it-breaks-glibc.patch
 Patch2:     0002-Applied-MIPS-patches.patch
 Patch3:     0003-linux-user-fix-segfault-deadlock.patch
 Patch4:     0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
+Patch5:     0005-arm64-Set-source-for-ret-instruction-correctly.patch
 BuildRequires:  pkgconfig(ext2fs)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(zlib)
@@ -49,6 +50,8 @@ QEMU is an extremely well-performing CPU emulator that allows you to choose betw
 %patch3 -p1
 # 0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
 %patch4 -p1
+# 0005-arm64-Set-source-for-ret-instruction-correctly.patch
+%patch5 -p1
 # >> setup
 # << setup
 

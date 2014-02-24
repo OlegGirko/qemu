@@ -33,6 +33,7 @@ Patches:
     - 0002-Applied-MIPS-patches.patch
     - 0003-linux-user-fix-segfault-deadlock.patch
     - 0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
+    - 0005-arm64-Set-source-for-ret-instruction-correctly.patch
 Files:
     - "%{_bindir}/qem*"
 Configure: none
