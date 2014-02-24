@@ -9,20 +9,15 @@ Name: qemu-usermode-static
 # << macros
 
 Summary:    Universal CPU emulator
-Version:    1.6.2
+Version:    2.0.0.0.git1.6dedf0
 Release:    1
 Group:      System/Emulators/PC
 License:    GPLv2
 ExclusiveArch:  %{ix86}
-URL:        https://launchpad.net/qemu-linaro/
-Source0:    qemu-aarch64-1.6.2.tar.gz
+URL:        http://qemu.org/
+Source0:    qemu-master.tar.gz
 Source1:    qemu-binfmt-conf.sh
 Source100:  qemu-usermode.yaml
-Patch1:     0001-Revert-fix-glibc-install-locales-it-breaks-glibc.patch
-Patch2:     0002-Applied-MIPS-patches.patch
-Patch3:     0003-linux-user-fix-segfault-deadlock.patch
-Patch4:     0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
-Patch5:     0005-arm64-Set-source-for-ret-instruction-correctly.patch
 BuildRequires:  pkgconfig(ext2fs)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(zlib)
@@ -42,16 +37,6 @@ QEMU is an extremely well-performing CPU emulator that allows you to choose betw
 %prep
 %setup -q -n src
 
-# 0001-Revert-fix-glibc-install-locales-it-breaks-glibc.patch
-%patch1 -p1
-# 0002-Applied-MIPS-patches.patch
-%patch2 -p1
-# 0003-linux-user-fix-segfault-deadlock.patch
-%patch3 -p1
-# 0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
-%patch4 -p1
-# 0005-arm64-Set-source-for-ret-instruction-correctly.patch
-%patch5 -p1
 # >> setup
 # << setup
 
@@ -76,7 +61,7 @@ CFLAGS=`echo $CFLAGS | sed 's|-O2|-O|g'` ; export CFLAGS ;
 --enable-linux-user \
 --enable-guest-base \
 --disable-werror \
---target-list=arm-linux-user,arm64-linux-user,mipsel-linux-user
+--target-list=arm-linux-user,aarch64-linux-user,mipsel-linux-user
 # << build pre
 
 
