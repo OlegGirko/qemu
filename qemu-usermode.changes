@@ -1,5 +1,5 @@
-* Mon Feb 24 2014 Oleg Girko <oleg.girko@jolla.com> - 1.6.2
-- Add patch from aarch64-1.6: set source for ret instruction correctly.
+* Mon Feb 24 2014 Oleg Girko <oleg.girko@jolla.com> - 2.0.0.git1.6dedf0
+- Rebase on ajb-a64-working branch.
 
 * Tue Jan 21 2014 Oleg Girko <oleg.girko@jolla.com> - 1.6.2
 - Add aarch64 support.

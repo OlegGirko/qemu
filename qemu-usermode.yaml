@@ -1,13 +1,13 @@
 Name: qemu-usermode
 Summary: Universal CPU emulator
-Version: 1.6.2
+Version: 2.0.0.0.git2.aa4789
 Release: 1
 Group: System/Emulators/PC
 License: GPLv2
-URL: https://launchpad.net/qemu-linaro/
+URL: https://github.com/stsquad/qemu/tree/ajb-a64-working
 ExclusiveArch: "%{ix86}"
 Sources:
-    - "qemu-aarch64-1.6.2.tar.gz"
+    - "qemu-ajb.tar.gz"
     - "qemu-binfmt-conf.sh"
 Description: 
     QEMU is an extremely well-performing CPU emulator that allows you to  
@@ -28,12 +28,6 @@ PkgBR:
     - glib2-static
     - pcre-static
     - pixman-devel
-Patches:
-    - 0001-Revert-fix-glibc-install-locales-it-breaks-glibc.patch
-    - 0002-Applied-MIPS-patches.patch
-    - 0003-linux-user-fix-segfault-deadlock.patch
-    - 0004-arm-fix-segfault-of-multithreaded-Qt-programs-in-thu.patch
-    - 0005-arm64-Set-source-for-ret-instruction-correctly.patch
 Files:
     - "%{_bindir}/qem*"
 Configure: none
