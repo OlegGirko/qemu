@@ -9,7 +9,7 @@ Name: qemu-usermode-static
 # << macros
 
 Summary:    Universal CPU emulator
-Version:    2.0.0.0.git1.6dedf0
+Version:    2.0.0.0.git2.dc2543
 Release:    1
 Group:      System/Emulators/PC
 License:    GPLv2
@@ -18,6 +18,37 @@ URL:        http://qemu.org/
 Source0:    qemu-master.tar.gz
 Source1:    qemu-binfmt-conf.sh
 Source100:  qemu-usermode.yaml
+Patch1:     0001-target-arm-Fix-raw-read-and-write-functions-on-AArch.patch
+Patch2:     0002-target-arm-A64-Make-cache-ID-registers-visible-to-AA.patch
+Patch3:     0003-target-arm-Implement-AArch64-CurrentEL-sysreg.patch
+Patch4:     0004-target-arm-Implement-AArch64-MIDR_EL1.patch
+Patch5:     0005-target-arm-Implement-AArch64-cache-invalidate-clean-.patch
+Patch6:     0006-target-arm-Implement-AArch64-TLB-invalidate-ops.patch
+Patch7:     0007-target-arm-Implement-AArch64-dummy-MDSCR_EL1.patch
+Patch8:     0008-target-arm-Implement-AArch64-memory-attribute-regist.patch
+Patch9:     0009-target-arm-Implement-AArch64-SCTLR_EL1.patch
+Patch10:    0010-target-arm-Implement-AArch64-TCR_EL1.patch
+Patch11:    0011-target-arm-Implement-AArch64-VBAR_EL1.patch
+Patch12:    0012-target-arm-Implement-AArch64-TTBR.patch
+Patch13:    0013-target-arm-Implement-AArch64-MPIDR.patch
+Patch14:    0014-target-arm-Implement-AArch64-generic-timers.patch
+Patch15:    0015-target-arm-Implement-AArch64-ID-and-feature-register.patch
+Patch16:    0016-target-arm-Implement-AArch64-dummy-breakpoint-and-wa.patch
+Patch17:    0017-target-arm-Implement-AArch64-OSLAR_EL1-sysreg-as-WI.patch
+Patch18:    0018-target-arm-Get-MMU-index-information-correct-for-A64.patch
+Patch19:    0019-target-arm-A64-Implement-WFI.patch
+Patch20:    0020-target-arm-Store-AIF-bits-in-env-pstate-for-AArch32.patch
+Patch21:    0021-target-arm-Implement-AArch64-DAIF-system-register.patch
+Patch22:    0022-target-arm-A64-Implement-MSR-immediate-instructions.patch
+Patch23:    0023-target-arm-Implement-AArch64-view-of-CPACR.patch
+Patch24:    0024-target-arm-Add-utility-function-for-checking-AA32-64.patch
+Patch25:    0025-target-arm-Define-exception-record-for-AArch64-excep.patch
+Patch26:    0026-target-arm-Provide-correct-syndrome-information-for-.patch
+Patch27:    0027-target-arm-Add-support-for-generating-exceptions-wit.patch
+Patch28:    0028-target-arm-A64-Correctly-fault-FP-Neon-if-CPACR.FPEN.patch
+Patch29:    0029-target-arm-A64-Add-assertion-that-FP-access-was-chec.patch
+Patch30:    0030-target-arm-Fix-VFP-enables-for-AArch32-EL0-under-AAr.patch
+Patch31:    0031-target-arm-Add-v8-mmu-translation-support.patch
 BuildRequires:  pkgconfig(ext2fs)
 BuildRequires:  pkgconfig(glib-2.0)
 BuildRequires:  pkgconfig(zlib)
@@ -37,6 +68,68 @@ QEMU is an extremely well-performing CPU emulator that allows you to choose betw
 %prep
 %setup -q -n src
 
+# 0001-target-arm-Fix-raw-read-and-write-functions-on-AArch.patch
+%patch1 -p1
+# 0002-target-arm-A64-Make-cache-ID-registers-visible-to-AA.patch
+%patch2 -p1
+# 0003-target-arm-Implement-AArch64-CurrentEL-sysreg.patch
+%patch3 -p1
+# 0004-target-arm-Implement-AArch64-MIDR_EL1.patch
+%patch4 -p1
+# 0005-target-arm-Implement-AArch64-cache-invalidate-clean-.patch
+%patch5 -p1
+# 0006-target-arm-Implement-AArch64-TLB-invalidate-ops.patch
+%patch6 -p1
+# 0007-target-arm-Implement-AArch64-dummy-MDSCR_EL1.patch
+%patch7 -p1
+# 0008-target-arm-Implement-AArch64-memory-attribute-regist.patch
+%patch8 -p1
+# 0009-target-arm-Implement-AArch64-SCTLR_EL1.patch
+%patch9 -p1
+# 0010-target-arm-Implement-AArch64-TCR_EL1.patch
+%patch10 -p1
+# 0011-target-arm-Implement-AArch64-VBAR_EL1.patch
+%patch11 -p1
+# 0012-target-arm-Implement-AArch64-TTBR.patch
+%patch12 -p1
+# 0013-target-arm-Implement-AArch64-MPIDR.patch
+%patch13 -p1
+# 0014-target-arm-Implement-AArch64-generic-timers.patch
+%patch14 -p1
+# 0015-target-arm-Implement-AArch64-ID-and-feature-register.patch
+%patch15 -p1
+# 0016-target-arm-Implement-AArch64-dummy-breakpoint-and-wa.patch
+%patch16 -p1
+# 0017-target-arm-Implement-AArch64-OSLAR_EL1-sysreg-as-WI.patch
+%patch17 -p1
+# 0018-target-arm-Get-MMU-index-information-correct-for-A64.patch
+%patch18 -p1
+# 0019-target-arm-A64-Implement-WFI.patch
+%patch19 -p1
+# 0020-target-arm-Store-AIF-bits-in-env-pstate-for-AArch32.patch
+%patch20 -p1
+# 0021-target-arm-Implement-AArch64-DAIF-system-register.patch
+%patch21 -p1
+# 0022-target-arm-A64-Implement-MSR-immediate-instructions.patch
+%patch22 -p1
+# 0023-target-arm-Implement-AArch64-view-of-CPACR.patch
+%patch23 -p1
+# 0024-target-arm-Add-utility-function-for-checking-AA32-64.patch
+%patch24 -p1
+# 0025-target-arm-Define-exception-record-for-AArch64-excep.patch
+%patch25 -p1
+# 0026-target-arm-Provide-correct-syndrome-information-for-.patch
+%patch26 -p1
+# 0027-target-arm-Add-support-for-generating-exceptions-wit.patch
+%patch27 -p1
+# 0028-target-arm-A64-Correctly-fault-FP-Neon-if-CPACR.FPEN.patch
+%patch28 -p1
+# 0029-target-arm-A64-Add-assertion-that-FP-access-was-chec.patch
+%patch29 -p1
+# 0030-target-arm-Fix-VFP-enables-for-AArch32-EL0-under-AAr.patch
+%patch30 -p1
+# 0031-target-arm-Add-v8-mmu-translation-support.patch
+%patch31 -p1
 # >> setup
 # << setup
 
@@ -96,6 +189,7 @@ mv %{buildroot}%{_bindir}/qemu-mipsel %{buildroot}%{_bindir}/qemu-mipsel-static
 %if "%{name}" == "qemu-usermode"
 mv %{buildroot}%{_bindir}/qemu-arm %{buildroot}%{_bindir}/qemu-arm-dynamic
 mv %{buildroot}%{_bindir}/qemu-mipsel %{buildroot}%{_bindir}/qemu-mipsel-dynamic
+mv %{buildroot}%{_bindir}/qemu-aarch64 %{buildroot}%{_bindir}/qemu-aarch64-dynamic
 %endif
 # << install post
 

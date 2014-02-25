@@ -1,6 +1,6 @@
 Name: qemu-usermode
 Summary: Universal CPU emulator
-Version: 2.0.0.0.git1.6dedf0
+Version: 2.0.0.0.git2.dc2543
 Release: 1
 Group: System/Emulators/PC
 License: GPLv2
@@ -28,6 +28,38 @@ PkgBR:
     - glib2-static
     - pcre-static
     - pixman-devel
+Patches:
+    - 0001-target-arm-Fix-raw-read-and-write-functions-on-AArch.patch
+    - 0002-target-arm-A64-Make-cache-ID-registers-visible-to-AA.patch
+    - 0003-target-arm-Implement-AArch64-CurrentEL-sysreg.patch
+    - 0004-target-arm-Implement-AArch64-MIDR_EL1.patch
+    - 0005-target-arm-Implement-AArch64-cache-invalidate-clean-.patch
+    - 0006-target-arm-Implement-AArch64-TLB-invalidate-ops.patch
+    - 0007-target-arm-Implement-AArch64-dummy-MDSCR_EL1.patch
+    - 0008-target-arm-Implement-AArch64-memory-attribute-regist.patch
+    - 0009-target-arm-Implement-AArch64-SCTLR_EL1.patch
+    - 0010-target-arm-Implement-AArch64-TCR_EL1.patch
+    - 0011-target-arm-Implement-AArch64-VBAR_EL1.patch
+    - 0012-target-arm-Implement-AArch64-TTBR.patch
+    - 0013-target-arm-Implement-AArch64-MPIDR.patch
+    - 0014-target-arm-Implement-AArch64-generic-timers.patch
+    - 0015-target-arm-Implement-AArch64-ID-and-feature-register.patch
+    - 0016-target-arm-Implement-AArch64-dummy-breakpoint-and-wa.patch
+    - 0017-target-arm-Implement-AArch64-OSLAR_EL1-sysreg-as-WI.patch
+    - 0018-target-arm-Get-MMU-index-information-correct-for-A64.patch
+    - 0019-target-arm-A64-Implement-WFI.patch
+    - 0020-target-arm-Store-AIF-bits-in-env-pstate-for-AArch32.patch
+    - 0021-target-arm-Implement-AArch64-DAIF-system-register.patch
+    - 0022-target-arm-A64-Implement-MSR-immediate-instructions.patch
+    - 0023-target-arm-Implement-AArch64-view-of-CPACR.patch
+    - 0024-target-arm-Add-utility-function-for-checking-AA32-64.patch
+    - 0025-target-arm-Define-exception-record-for-AArch64-excep.patch
+    - 0026-target-arm-Provide-correct-syndrome-information-for-.patch
+    - 0027-target-arm-Add-support-for-generating-exceptions-wit.patch
+    - 0028-target-arm-A64-Correctly-fault-FP-Neon-if-CPACR.FPEN.patch
+    - 0029-target-arm-A64-Add-assertion-that-FP-access-was-chec.patch
+    - 0030-target-arm-Fix-VFP-enables-for-AArch32-EL0-under-AAr.patch
+    - 0031-target-arm-Add-v8-mmu-translation-support.patch
 Files:
     - "%{_bindir}/qem*"
 Configure: none
