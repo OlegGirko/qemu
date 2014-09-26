@@ -57,7 +57,6 @@ BuildRequires:  curl-devel
 BuildRequires:  zlib-static
 BuildRequires:  glibc-static
 BuildRequires:  python-devel
-BuildRequires:  glib2-static
 BuildRequires:  pcre-static
 BuildRequires:  pixman-devel
 

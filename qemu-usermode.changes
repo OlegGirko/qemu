@@ -1,3 +1,6 @@
+* Fri Sep 26 2014 Oleg Girko <oleg.girko@jolla.com> - 2.0.0.0.git2.4a749e
+- Don't require glib2-static, dynamic glib2 is used anyway.
+
 * Tue Feb 25 2014 Oleg Girko <oleg.girko@jolla.com> - 2.0.0.0.git2.4a749e
 - Update to newer master.
 - Apply patches for aarch64 system emulation.
